@@ -1,14 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Layers, Plus } from 'lucide-react';
 
 import PoolFlipCard from '../components/dashboard/PoolFlipCard';
 
-const CreatePoolModal = ({ onClose }) => {
+const CreatePoolModal = ({ onClose, onSuccess }) => {
   const [totalPool, setTotalPool] = useState(1000);
   const [members, setMembers] = useState(10);
   
   const monthlyPay = members > 0 ? (totalPool / members) : 0;
   const fixedDeposit = monthlyPay * 2;
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      await fetch('http://localhost:5000/api/pools', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          totalPot: totalPool,
+          dummyMembers: members
+        })
+      });
+      if (onSuccess) onSuccess();
+      onClose();
+    } catch (err) {
+      console.error(err);
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
@@ -18,7 +39,8 @@ const CreatePoolModal = ({ onClose }) => {
         <div className="mb-2">
           <label className="text-[10px] font-extrabold text-teal-400 uppercase tracking-widest mb-1 block cursor-pointer" htmlFor="totalPool">Total Pool Output</label>
           <div className="flex items-center text-4xl font-black text-white">
-             $<input id="totalPool" type="number" value={totalPool} onChange={e => setTotalPool(Number(e.target.value) || 0)} className="bg-transparent text-white w-full outline-none font-black ml-1 border-b border-transparent focus:border-teal-500 transition-colors" />
+             <input id="totalPool" type="number" value={totalPool} onChange={e => setTotalPool(Number(e.target.value) || 0)} className="bg-transparent text-white w-full outline-none font-black min-w-[150px] mr-2 border-b border-white/20 hover:border-white/50 focus:border-teal-400 transition-colors" />
+             CTX
           </div>
         </div>
         
@@ -31,7 +53,7 @@ const CreatePoolModal = ({ onClose }) => {
           </div>
           <div className="flex justify-between items-center text-sm">
              <span className="text-teal-400 font-bold uppercase tracking-widest text-[10px]">Monthly Pay</span>
-             <span className="font-black text-white">${monthlyPay.toLocaleString()}</span>
+             <span className="font-black text-white">{monthlyPay.toLocaleString()} CTX</span>
           </div>
           <div className="flex justify-between items-center text-sm">
              <span className="text-teal-400 font-bold uppercase tracking-widest text-[10px]">Total Months</span>
@@ -39,12 +61,12 @@ const CreatePoolModal = ({ onClose }) => {
           </div>
           <div className="flex justify-between items-center text-sm">
              <span className="text-teal-400 font-bold uppercase tracking-widest text-[10px]">Fixed Deposit</span>
-             <span className="font-black text-white">${fixedDeposit.toLocaleString()}</span>
+             <span className="font-black text-white">{fixedDeposit.toLocaleString()} CTX</span>
           </div>
         </div>
         
-        <button onClick={onClose} className="w-full py-3 bg-white text-teal-900 rounded-xl font-black text-sm hover:bg-slate-100 transition-colors shadow-inner flex justify-center items-center">
-          Confirm & Create Pool
+        <button onClick={handleSubmit} disabled={isSubmitting} className="w-full py-3 bg-white text-teal-900 rounded-xl font-black text-sm hover:bg-slate-100 disabled:opacity-50 transition-colors shadow-inner flex justify-center items-center">
+          {isSubmitting ? 'Creating...' : 'Confirm & Create Pool'}
         </button>
       </div>
     </div>
@@ -55,15 +77,31 @@ const MyPools = () => {
   const [isCreating, setIsCreating] = useState(false);
   
 
-  // Mock data representing different pools
-  const availablePools = [
-    { id: 1, totalAmount: 1000, members: 10, status: 'OPEN' },
-    { id: 2, totalAmount: 2000, members: 10, status: 'FILLING FAST' },
-    { id: 3, totalAmount: 6000, members: 12, status: 'OPEN' },
-    { id: 4, totalAmount: 12000, members: 12, status: 'PREMIUM' },
-    { id: 5, totalAmount: 22500, members: 15, status: 'PLATINUM' },
-    { id: 6, totalAmount: 40000, members: 20, status: 'ELITE' },
-  ];
+  const [availablePools, setAvailablePools] = useState([]);
+
+  // Group logic into fetch function to easily pass it around
+  const fetchPools = async () => {
+    try {
+      const res = await fetch('http://localhost:5000/api/pools');
+      const data = await res.json();
+      const formattedPools = data.map(p => ({
+        id: p._id,
+        totalAmount: p.totalPot || 0,
+        members: p.durationMonths || 10,
+        joinedCount: Array.isArray(p.members) ? p.members.length : 0,
+        status: p.status ? (p.status === 'pending' ? 'OPEN' : p.status.toUpperCase()) : 'OPEN'
+      }))
+      // Filter out ghost pools with 0 totalPot
+      .filter(p => p.totalAmount > 0);
+      setAvailablePools(formattedPools);
+    } catch (err) {
+      console.error('Failed to fetch pools:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchPools();
+  }, []);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -80,11 +118,11 @@ const MyPools = () => {
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {availablePools.map(pool => (
-          <PoolFlipCard key={pool.id} pool={pool} />
+          <PoolFlipCard key={pool.id} pool={pool} onRefresh={fetchPools} />
         ))}
       </div>
       
-      {isCreating && <CreatePoolModal onClose={() => setIsCreating(false)} />}
+      {isCreating && <CreatePoolModal onClose={() => setIsCreating(false)} onSuccess={fetchPools} />}
     </div>
   );
 };

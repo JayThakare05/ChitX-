@@ -40,6 +40,53 @@ const UserSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    cibilScore: {
+        type: Number,
+        default: null
+    },
+    // --- AI ML Telemetry Fields ---
+    avgBalance: {
+        type: Number,
+        default: 15000
+    },
+    salaryConsistency: {
+        type: Number,
+        default: 0.8
+    },
+    spendingStability: {
+        type: Number,
+        default: 0.7
+    },
+    paymentTimeliness: {
+        type: Number,
+        default: 0.9
+    },
+    defaults: {
+        type: Number,
+        default: 0
+    },
+    participationCount: {
+        type: Number,
+        default: 1
+    },
+    contributionConsistency: {
+        type: Number,
+        default: 0.9
+    },
+    participationFrequency: {
+        type: Number,
+        default: 5
+    },
+    // ------------------------------
+    desiredContribution: {
+        type: Number,
+        default: 1000 // default mock amount
+    },
+    matchStatus: {
+        type: String,
+        enum: ['waiting', 'matched'],
+        default: 'waiting'
+    },
     encryptedPrivateKey: {
         type: String,
         default: null

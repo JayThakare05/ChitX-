@@ -7,7 +7,7 @@ import {
 } from '@rainbow-me/rainbowkit';
 import { WagmiProvider } from 'wagmi';
 import {
-  polygonAmoy,
+  sepolia,
 } from 'wagmi/chains';
 import {
   QueryClientProvider,
@@ -34,7 +34,7 @@ import './index.css';
 const config = getDefaultConfig({
   appName: 'ChitX',
   projectId: 'YOUR_PROJECT_ID', // In a real app, this would be an env var
-  chains: [polygonAmoy],
+  chains: [sepolia],
   ssr: true, // If your dApp uses server side rendering (SSR)
 });
 

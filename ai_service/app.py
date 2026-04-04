@@ -327,6 +327,96 @@ async def calculate_score(data: KYCData):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class ClusterUser(BaseModel):
+    id: str
+    trustScore: float
+    cibilScore: float
+
+class ClusterRequest(BaseModel):
+    users: list[ClusterUser]
+
+@app.post("/ai/cluster-pool")
+async def cluster_pool(data: ClusterRequest):
+    try:
+        from sklearn.cluster import KMeans
+        import numpy as np
+
+        users = data.users
+        min_size = 10 if len(users) > 100 else 5
+        max_size = 15
+
+        if len(users) < min_size:
+            # Not enough for a single pool
+            return {"clusters": []}
+
+        # Prepare features array
+        features = np.array([[u.trustScore, u.cibilScore if u.cibilScore else 400] for u in users])
+        
+        # Determine optimal number of clusters (aiming for 12 users per cluster safely)
+        n_clusters = max(1, len(users) // 12)
+        
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+        labels = kmeans.fit_predict(features)
+        
+        # Group users by labels
+        clusters_dict = {}
+        for i, user in enumerate(users):
+            label = int(labels[i])
+            if label not in clusters_dict:
+                clusters_dict[label] = []
+            clusters_dict[label].append(user.id)
+            
+        # Post-process: ensure min_size and max_size constraints
+        valid_clusters = []
+        overflow = []
+        
+        for label, items in clusters_dict.items():
+            if len(items) > max_size:
+                # Chunk roughly into 10-12 optimally
+                for i in range(0, len(items), 12):
+                    chunk = items[i:i+12]
+                    if len(chunk) >= min_size:
+                        valid_clusters.append(chunk)
+                    else:
+                        overflow.extend(chunk)
+            elif len(items) < min_size:
+                overflow.extend(items)
+            else:
+                valid_clusters.append(items)
+                
+        # Deal with overflow sequentially
+        import math
+        while len(overflow) > 0:
+            if len(overflow) >= min_size:
+                # Extract chunk matching the minimum safely
+                sz = max(10, min_size)
+                chunk = overflow[:sz]
+                valid_clusters.append(chunk)
+                overflow = overflow[sz:]
+            else:
+                # Less than minimum, try to distribute them across valid clusters
+                if not valid_clusters:
+                    break
+                for orphan in overflow:
+                    placed = False
+                    for vc in valid_clusters:
+                        # Append to any cluster that hasn't hit fifteen
+                        if len(vc) < max_size:
+                            vc.append(orphan)
+                            placed = True
+                            break
+                    if not placed:
+                        # Overflow all pools? Just force it.
+                        valid_clusters[0].append(orphan)
+                overflow = []
+
+        return {"clusters": valid_clusters}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 if __name__ == "__main__":
     import uvicorn

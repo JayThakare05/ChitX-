@@ -1,5 +1,7 @@
 import React from 'react';
 import { Droplets, Zap, Clock, ChevronRight } from 'lucide-react';
+import { useAccount, useReadContract } from 'wagmi';
+import { formatUnits } from 'viem';
 import BalanceCard from '../components/dashboard/BalanceCard';
 import TrustScoreCard from '../components/dashboard/TrustScoreCard';
 import APYCard from '../components/dashboard/APYCard';
@@ -7,14 +9,28 @@ import PoolCard from '../components/dashboard/PoolCard';
 import AIInsightsCard from '../components/dashboard/AIInsightsCard';
 import TreasuryUtilization from '../components/dashboard/TreasuryUtilization';
 import TransactionTable from '../components/dashboard/TransactionTable';
+import { CTX_TOKEN_ADDRESS, ERC20_ABI } from '../config/contracts';
 
 const Dashboard = () => {
+  const { address: connectedAddress } = useAccount();
+
   // Read user session from localStorage
   const userData = JSON.parse(localStorage.getItem('chitx_user') || '{}');
   const trustScore = userData.trustScore || 0;
-  const ctxBalance = userData.airdropAmount || (trustScore * 10);
-  const walletAddress = userData.walletAddress || '0x0000...0000';
+  const walletAddress = connectedAddress || userData.walletAddress || '0x0000...0000';
   const shortWallet = walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : '—';
+
+  // Live on-chain CTX balance
+  const { data: ctxBalanceRaw } = useReadContract({
+    address: CTX_TOKEN_ADDRESS,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: walletAddress && walletAddress.startsWith('0x') ? [walletAddress] : undefined,
+    query: { enabled: !!walletAddress && walletAddress.startsWith('0x') && walletAddress.length === 42 },
+  });
+  const ctxBalance = ctxBalanceRaw
+    ? parseFloat(formatUnits(ctxBalanceRaw, 18)).toFixed(0)
+    : (userData.airdropAmount || (trustScore * 10)); // fallback to localStorage if chain read fails
 
   const treasuryData = [
     { name: 'Yield Optimized', value: 64, percent: 64, color: '#0d9488' },

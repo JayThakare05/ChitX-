@@ -24,6 +24,7 @@
     "react-router-dom": "^7.14.0",
     "reaviz": "^16.1.2",
     "recharts": "^3.8.1",
+    "socket.io-client": "^4.8.3",
     "tailwind-merge": "^3.5.0",
     "viem": "^2.47.10",
     "wagmi": "^2.19.5"
