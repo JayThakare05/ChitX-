@@ -24,4 +24,3 @@ export const TransactionsLog = () => <PageContainer title="Transactions Log" des
 
 export const NotificationsPage = () => <PageContainer title="Notifications" description="Alerts for governance proposals, pending contributions, and active pool milestones." />;
 
-export const SettingsPage = () => <PageContainer title="Settings" description="Manage your KYC verification, privacy preferences, and wallet connections." />;

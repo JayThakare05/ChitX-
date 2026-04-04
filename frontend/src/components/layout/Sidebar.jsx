@@ -7,8 +7,6 @@ import {
   ShieldCheck, 
   AlertCircle, 
   BrainCircuit, 
-  History, 
-  Bell, 
   Settings,
   Plus
 } from 'lucide-react';
@@ -26,10 +24,8 @@ const navItems = [
   { icon: PlusCircle, label: 'Joint Pool', path: '/joint-pool' },
   { icon: CreditCard, label: 'Payments', path: '/payments' },
   { icon: ShieldCheck, label: 'Trust Score', path: '/trust-score' },
+  { icon: BrainCircuit, label: 'AI Sim Pool', path: '/pool-simulator' },
   { icon: AlertCircle, label: 'Emergency Fund', path: '/emergency-fund' },
-  { icon: BrainCircuit, label: 'AI Insights', path: '/ai-insights' },
-  { icon: History, label: 'Transactions', path: '/transactions' },
-  { icon: Bell, label: 'Notifications', path: '/notifications' },
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 

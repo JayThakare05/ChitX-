@@ -30,4 +30,9 @@ router.post('/onboarding', authController.onboarding);
 // @access  Public
 router.post('/login', authController.loginWithWallet);
 
+// @route   PUT api/auth/profile
+// @desc    Update user profile
+// @access  Public
+router.put('/profile', authController.updateProfile);
+
 module.exports = router;

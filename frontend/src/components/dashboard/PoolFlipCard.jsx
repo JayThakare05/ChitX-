@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Layers, LogOut } from 'lucide-react';
+import { Layers, LogOut, ShieldAlert, Award, Clock, Users, ArrowRight, CheckCircle2, AlertCircle, BrainCircuit } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAccount, useWriteContract, useSwitchChain, useWaitForTransactionReceipt } from 'wagmi';
 import { sepolia } from 'wagmi/chains';
 import { parseEther } from 'viem';
-import { ConfirmModal, ResultModal } from '../ui/PoolModals';
+import { ConfirmModal, ResultModal, EligibilityModal } from '../ui/PoolModals';
 
 // CTX Token contract details (Sepolia)
 const CTX_ADDRESS = '0x3F78A5476539BfBD529FfEA0e713f887141412e3';
@@ -30,6 +31,7 @@ const PoolFlipCard = ({ pool, onRefresh }) => {
   const monthlyPay = pool.monthlyPay || 0;
   const totalAmount = pool.totalAmount || (members ? (monthlyPay * members) : 'Dynamic');
   const fixedDeposit = monthlyPay * 2;
+  const navigate = useNavigate();
 
   const [isJoining, setIsJoining] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
@@ -37,6 +39,8 @@ const PoolFlipCard = ({ pool, onRefresh }) => {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [resultModal, setResultModal] = useState({ open: false, success: false, title: '', message: '', details: [] });
   const [joinStep, setJoinStep] = useState(''); // '', 'wallet', 'backend'
+  const [showEligibility, setShowEligibility] = useState(false);
+  const [eligibilityChecks, setEligibilityChecks] = useState([]);
 
   const userStr = localStorage.getItem('chitx_user');
   const userWallet = userStr ? JSON.parse(userStr).walletAddress?.toLowerCase() : null;
@@ -63,9 +67,83 @@ const PoolFlipCard = ({ pool, onRefresh }) => {
     } catch { /* ignore */ }
   };
 
-  const openJoinConfirm = (e) => {
+  const openJoinConfirm = async (e) => {
     e.stopPropagation();
-    fetchBalance();
+
+    // ── Read stored user data ──────────────────────────────────
+    const userData = userStr ? JSON.parse(userStr) : {};
+    const trustScore       = Number(userData.trustScore   ?? 0);
+    const income           = Number(userData.income        ?? 0);
+    const expenses         = Number(userData.expenses      ?? 0);
+    const disposable       = income - expenses;
+
+    // ── Fetch live CTX balance ────────────────────────────────
+    let balance = 0;
+    try {
+      const res  = await fetch(`http://localhost:5000/api/pools/balance/${userWallet}`);
+      const data = await res.json();
+      if (res.ok) {
+        balance = parseFloat(data.onChainBalance) || 0;
+        setCtxBalance(balance);
+      }
+    } catch { /* network error — leave balance at 0 */ }
+
+    // ── Build checks ──────────────────────────────────────────
+    const isMicroPool  = monthlyPay >= 5 && monthlyPay <= 10;
+    const isLowTrust   = trustScore < 50;
+
+    const incomeOk     = disposable >= monthlyPay;
+    const balanceOk    = balance    >= fixedDeposit;
+    
+    // Low trust users can join micro-pools IF balance is OK.
+    // For larger pools, low trust is a hard fail for that check.
+    const trustPassed  = trustScore >= 50 || (isMicroPool && balanceOk);
+    
+    let trustHint = '';
+    if (trustScore >= 50) {
+      trustHint = 'Score is above the minimum threshold of 50.';
+    } else if (isMicroPool) {
+      trustHint = balanceOk 
+        ? `Low-Trust Exception: You can join this micro-pool because your balance is sufficient.`
+        : `Your score is ${trustScore}. For micro-pools, a sufficient CTX balance is compulsory.`;
+    } else {
+      trustHint = `Your score is ${trustScore}. Pools above $10 require a minimum trust score of 50.`;
+    }
+
+    const checks = [
+      {
+        label:  'Trust Score',
+        value:  `${trustScore} / 100`,
+        passed: trustPassed,
+        hint:   trustHint,
+        isHardRequirement: isLowTrust && !isMicroPool, // Tag for modal
+      },
+      {
+        label:  'Disposable Income',
+        value:  `$${disposable.toLocaleString()} / mo`,
+        passed: incomeOk,
+        hint:   incomeOk
+          ? `You have \$${disposable.toLocaleString()} free after expenses — enough to cover the \$${monthlyPay} monthly pay.`
+          : `Your disposable income (\$${disposable.toLocaleString()}) is less than the pool's monthly pay (\$${monthlyPay}). Reduce expenses or choose a smaller pool.`,
+      },
+      {
+        label:  'CTX Balance',
+        value:  `${balance.toFixed(1)} CTX`,
+        passed: balanceOk,
+        hint:   balanceOk
+          ? `You have ${balance.toFixed(1)} CTX — sufficient for the ${fixedDeposit} CTX fixed deposit.`
+          : `You need ${fixedDeposit} CTX as a fixed deposit but only have ${balance.toFixed(1)} CTX. Earn more CTX first.`,
+        isHardRequirement: isLowTrust && isMicroPool, // Compulsory for micro-pools if low trust
+      },
+    ];
+
+    setEligibilityChecks(checks);
+    setShowEligibility(true);
+  };
+
+  // Called when user clicks "Proceed to Pay" from the eligibility modal
+  const proceedAfterEligibility = () => {
+    setShowEligibility(false);
     setShowJoinConfirm(true);
   };
 
@@ -273,8 +351,8 @@ const PoolFlipCard = ({ pool, onRefresh }) => {
                 </button>
               ) : canLeave ? (
                 <>
-                  <button disabled className="flex-1 py-2.5 bg-teal-800 text-teal-400 rounded-xl font-bold text-sm flex justify-center items-center">
-                    Joined ✓
+                  <button onClick={() => navigate(`/pool-simulator?poolId=${pool._id}`)} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm flex justify-center items-center gap-1.5 transition-colors hover:bg-indigo-700">
+                    <BrainCircuit size={14} /> Simulate
                   </button>
                   <button onClick={(e) => { e.stopPropagation(); setShowLeaveConfirm(true); }} disabled={isLeaving} className="flex-1 py-2.5 bg-red-500/20 text-red-300 border border-red-500/30 rounded-xl font-bold text-sm hover:bg-red-500/30 transition-colors flex justify-center items-center gap-1.5 disabled:opacity-80">
                     <LogOut size={14} />
@@ -282,14 +360,23 @@ const PoolFlipCard = ({ pool, onRefresh }) => {
                   </button>
                 </>
               ) : (
-                <button disabled className="w-full py-2.5 bg-teal-800 text-teal-400 rounded-xl font-bold text-sm flex justify-center items-center">
-                  Joined ✓
+                <button onClick={() => navigate(`/pool-simulator?poolId=${pool._id}`)} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm flex justify-center items-center gap-2 hover:bg-indigo-700">
+                  <BrainCircuit size={16} /> Simulate AI Process
                 </button>
               )}
             </div>
           </div>
         </div>
       </div>
+
+      <EligibilityModal
+        isOpen={showEligibility}
+        onClose={() => setShowEligibility(false)}
+        onProceed={proceedAfterEligibility}
+        checks={eligibilityChecks}
+        poolMonthlyPay={monthlyPay}
+        fixedDeposit={fixedDeposit}
+      />
 
       {/* ===== MODALS ===== */}
       <ConfirmModal

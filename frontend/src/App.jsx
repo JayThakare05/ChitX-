@@ -22,12 +22,13 @@ import MyPools from './pages/MyPools';
 import JointPool from './pages/JointPool';
 import Payments from './pages/Payments';
 import TrustScoreDetails from './pages/TrustScoreDetails';
+import Settings from './pages/Settings';
+import SimulationPanel from './pages/SimulationPanel';
 import {
   EmergencyFund,
   AIInsightsPage,
   TransactionsLog,
-  NotificationsPage,
-  SettingsPage
+  NotificationsPage
 } from './pages/Placeholders';
 import './index.css';
 
@@ -67,7 +68,8 @@ function App() {
               <Route path="/ai-insights" element={<Layout><AIInsightsPage /></Layout>} />
               <Route path="/transactions" element={<Layout><TransactionsLog /></Layout>} />
               <Route path="/notifications" element={<Layout><NotificationsPage /></Layout>} />
-              <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
+              <Route path="/settings" element={<Layout><Settings /></Layout>} />
+              <Route path="/pool-simulator" element={<Layout><SimulationPanel /></Layout>} />
               
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />

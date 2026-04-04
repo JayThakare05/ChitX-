@@ -1,6 +1,8 @@
 const Pool = require('../models/Pool');
 const User = require('../models/User');
+const Transaction = require('../models/Transaction');
 const web3Service = require('../services/web3Service');
+
 
 // Create a new pool
 exports.createPool = async (req, res) => {
@@ -106,20 +108,11 @@ exports.joinPool = async (req, res) => {
             return res.status(404).json({ error: 'User not found in system. Please register.' });
         }
 
-        // Eligibility Check 1: Trust Score
-        if (user.trustScore < 50) {
-            return res.status(403).json({ error: 'Your trust score is too low to join a pool. Minimum required: 50.' });
-        }
-
-        // Eligibility Check 2: Income - Expenses limit
+        // ── Eligibility Logic (Synchronized with Frontend) ────────────────────────
         const disposable = user.income - user.expenses;
-        if (disposable < pool.monthlyPay) {
-            return res.status(403).json({ 
-                error: `Insufficient disposable income. Your limit ($${disposable}) is less than the pool's monthly pay ($${pool.monthlyPay}).`
-            });
-        }
-
         const fixedDeposit = pool.monthlyPay * 2;
+        const isMicroPool  = pool.monthlyPay >= 5 && pool.monthlyPay <= 10;
+        const isLowTrust   = user.trustScore < 50;
 
         // Check on-chain CTX balance
         let onChainBalance = 0;
@@ -127,9 +120,37 @@ exports.joinPool = async (req, res) => {
         onChainBalance = parseFloat(balanceResult.balance) || 0;
         console.log(`💰 On-chain CTX balance for ${walletAddress}: ${onChainBalance}`);
 
-        if (onChainBalance < fixedDeposit) {
-            return res.status(403).json({ 
-                error: `Insufficient CTX balance. You need ${fixedDeposit} CTX but only have ${onChainBalance.toFixed(1)} CTX on-chain.`
+        const incomeOk  = disposable >= pool.monthlyPay;
+        const balanceOk = onChainBalance >= fixedDeposit;
+        
+        // Low trust users can join micro-pools IF balance is OK.
+        // For larger pools, low trust is a hard fail.
+        const trustOk = user.trustScore >= 50 || (isMicroPool && balanceOk);
+
+        // ── Hard Requirements ───────────────────────────────────────────────────
+        if (isLowTrust) {
+            if (!isMicroPool) {
+                return res.status(403).json({ 
+                    error: `Trust score too low (${user.trustScore}/100). Pools above $10 require a minimum trust score of 50.` 
+                });
+            }
+            if (!balanceOk) {
+                return res.status(403).json({ 
+                    error: `For micro-pools, a sufficient CTX balance (${fixedDeposit} required) is compulsory for low-trust users.` 
+                });
+            }
+        }
+
+        const passedCount = [trustOk, incomeOk, balanceOk].filter(Boolean).length;
+
+        if (passedCount < 2) {
+            const reasons = [];
+            if (!trustOk)   reasons.push(`Trust score too low (${user.trustScore}/100, min 50)`);
+            if (!incomeOk)  reasons.push(`Disposable income ($${disposable}) is less than monthly pay ($${pool.monthlyPay})`);
+            if (!balanceOk) reasons.push(`CTX balance (${onChainBalance.toFixed(1)}) is less than required deposit (${fixedDeposit})`);
+            
+            return res.status(403).json({
+                error: `You need at least 2 of 3 eligibility criteria to join. Failed: ${reasons.join('; ')}.`
             });
         }
 
@@ -156,6 +177,21 @@ exports.joinPool = async (req, res) => {
 
         pool.poolTreasury = (pool.poolTreasury || 0) + fixedDeposit;
         await pool.save();
+
+        // ── Record transaction ──────────────────────────────────────
+        try {
+            await Transaction.create({
+                walletAddress: walletAddress.toLowerCase(),
+                type: 'POOL_JOIN',
+                direction: 'DEBIT',
+                amount: fixedDeposit,
+                poolId: poolId,
+                poolMonthlyPay: pool.monthlyPay,
+                description: `Joined pool — ${fixedDeposit} CTX fixed deposit locked`,
+                txHash: req.body.txHash || null,
+                status: 'SUCCESS'
+            });
+        } catch (txErr) { console.error('Transaction record error:', txErr.message); }
 
         // Fetch updated on-chain balance for display
         const updatedBalance = await web3Service.getBalance(walletAddress);
@@ -235,6 +271,21 @@ exports.leavePool = async (req, res) => {
 
         await pool.save();
 
+        // ── Record transaction ──────────────────────────────────────
+        try {
+            await Transaction.create({
+                walletAddress: wallet,
+                type: 'POOL_LEAVE',
+                direction: 'CREDIT',
+                amount: refundAmount,
+                poolId: poolId,
+                poolMonthlyPay: pool.monthlyPay,
+                description: `Left pool — ${refundAmount} CTX fixed deposit refunded`,
+                txHash: null,
+                status: 'SUCCESS'
+            });
+        } catch (txErr) { console.error('Transaction record error:', txErr.message); }
+
         // Get updated balance
         const updatedBalance = await web3Service.getBalance(wallet);
         const displayBalance = parseFloat(updatedBalance.balance) || (user ? user.tokensIssued : 0);
@@ -270,5 +321,170 @@ exports.getUserBalance = async (req, res) => {
     } catch (error) {
         console.error('Error fetching balance:', error);
         res.status(500).json({ error: 'Server error' });
+    }
+};
+
+// ============================================
+// AI Dynamic Simulators & Synthetic Data
+// ============================================
+
+exports.fillSynthetic = async (req, res) => {
+    try {
+        const poolId = req.params.id;
+        const pool = await Pool.findById(poolId);
+        if (!pool) return res.status(404).json({ error: 'Pool not found' });
+        
+        const MAX_POOL_SIZE = pool.members || 15;
+        const currentCount = pool.joinedMembers ? pool.joinedMembers.length : 0;
+        const toFill = MAX_POOL_SIZE - currentCount;
+
+        if (toFill <= 0) {
+            return res.status(400).json({ error: 'Pool is already full.' });
+        }
+
+        // Initialize dynamic parameters if not present
+        if (!pool.isDynamic) {
+            pool.isDynamic = true;
+            pool.currentBalance = pool.poolTreasury || 0;
+            pool.totalMonthlyCollection = pool.contributions ? pool.contributions.reduce((acc, c) => acc + (c.monthlyContribution || pool.monthlyPay), 0) : 0;
+            pool.simulationMonth = 0;
+            pool.cycleLimit = 1;
+        }
+
+        // Generate Synthetic Users
+        if (!pool.joinedMembers) pool.joinedMembers = [];
+        if (!pool.contributions) pool.contributions = [];
+
+        for (let i = 0; i < toFill; i++) {
+            const isHighTrust = Math.random() > 0.7; // 30% chance high trust
+            const isLowTrust = Math.random() < 0.2; // 20% chance low trust
+            
+            const trustScore = isHighTrust ? Math.floor(Math.random() * 20 + 80) :
+                               isLowTrust ? Math.floor(Math.random() * 20 + 30) :
+                               Math.floor(Math.random() * 30 + 50); // 50-80 base
+            
+            const randomIncomeMultiplier = Math.random() * 2 + 1; // 1x to 3x base payload
+            const monthlyContri = Math.floor(pool.monthlyPay * (Math.random() > 0.5 ? 1 : randomIncomeMultiplier));
+            const dummyWallet = `0xSYNTHETIC_${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+            
+            pool.joinedMembers.push(dummyWallet);
+            pool.contributions.push({
+                walletAddress: dummyWallet,
+                monthlyContribution: monthlyContri,
+                targetAmount: monthlyContri * MAX_POOL_SIZE, // Approximate a basic target (assumes max size duration)
+                fixedDeposit: pool.monthlyPay * 2,
+                trustScoreAtJoin: trustScore,
+                priorityScore: 0,
+                hasBeenPaid: false,
+                payoutMonth: 0
+            });
+            pool.totalMonthlyCollection += monthlyContri;
+        }
+
+        await pool.save();
+
+        res.status(200).json({
+            message: `Successfully populated pool with ${toFill} synthetic members balanced by varying algorithmic trust tiers.`,
+            pool
+        });
+
+    } catch (e) {
+        console.error('Synthetic fill error:', e);
+        res.status(500).json({ error: 'Failed to fill synthetic data.' });
+    }
+};
+
+exports.simulateMonth = async (req, res) => {
+    try {
+        const poolId = req.params.id;
+        const pool = await Pool.findById(poolId);
+        
+        if (!pool) return res.status(404).json({ error: 'Pool not found' });
+        
+        // Remove strictly dynamic requirement and implicitly upgrade pool logic
+        if (!pool.isDynamic) {
+            pool.isDynamic = true;
+            // Map legacy base pools to dynamic config
+            pool.totalMonthlyCollection = pool.contributions ? pool.contributions.reduce((acc, c) => {
+                if (!c.monthlyContribution || c.monthlyContribution === 0) c.monthlyContribution = pool.monthlyPay;
+                if (!c.targetAmount || c.targetAmount === 0) c.targetAmount = pool.monthlyPay * pool.members;
+                return acc + c.monthlyContribution;
+            }, 0) : 0;
+            pool.cycleLimit = 1;
+            pool.currentBalance = pool.poolTreasury || 0;
+            pool.simulationMonth = 0;
+        }
+
+        // Add monthly collection to current balance
+        pool.currentBalance += pool.totalMonthlyCollection;
+        pool.simulationMonth += 1;
+
+        const winnersThisMonth = [];
+        let balanceRemaining = pool.currentBalance;
+
+        // Get members who haven't won in this cycle
+        let eligible = pool.contributions.filter(c => !c.hasBeenPaid && c.targetAmount <= balanceRemaining);
+
+        // Sort by AI Priority Score / Trust score
+        const totalEligible = eligible.length;
+        eligible.sort((a, b) => b.trustScoreAtJoin - a.trustScoreAtJoin);
+
+        while (eligible.length > 0) {
+            const winner = eligible[0]; // Highest priority
+            
+            // Mark as paid
+            winner.hasBeenPaid = true;
+            winner.payoutMonth = pool.simulationMonth;
+            
+            // Generate detailed AI Context/Reasoning
+            const rankStr = `Ranked #1 out of ${totalEligible} eligible members.`;
+            const reasoning = `Winner AI selection logic: Trust Score (${winner.trustScoreAtJoin}%) secured priority. Their requested target ($${winner.targetAmount.toLocaleString()}) safely fit within the current pooled treasury balance ($${balanceRemaining.toLocaleString()}). ${rankStr}`;
+            
+            // Deduct
+            balanceRemaining -= winner.targetAmount;
+            winnersThisMonth.push({
+                walletAddress: winner.walletAddress,
+                targetAmount: winner.targetAmount,
+                trustScore: winner.trustScoreAtJoin,
+                aiReasoning: reasoning
+            });
+
+            // Re-eval for any remaining balance for remaining unpaid users
+            eligible = pool.contributions.filter(c => !c.hasBeenPaid && c.targetAmount <= balanceRemaining);
+            eligible.sort((a, b) => b.trustScoreAtJoin - a.trustScoreAtJoin);
+        }
+
+        pool.currentBalance = balanceRemaining;
+
+        // Check if cycle is complete (everyone has won once)
+        const allPaid = pool.contributions.every(c => c.hasBeenPaid);
+        let cycleReset = false;
+        if (allPaid) {
+            // Reset for next cycle if we haven't hit the cycle limit
+            cycleReset = true;
+            pool.contributions.forEach(c => {
+                c.hasBeenPaid = false;
+            });
+            pool.cycleLimit -= 1; // Used one cycle
+            if (pool.cycleLimit <= 0) {
+                pool.status = 'CLOSED';
+            }
+        }
+
+        await pool.save();
+
+        res.status(200).json({
+            message: `Simulation for Month ${pool.simulationMonth} complete.`,
+            month: pool.simulationMonth,
+            collectionAdded: pool.totalMonthlyCollection,
+            winners: winnersThisMonth,
+            balanceRemaining: pool.currentBalance,
+            cycleReset,
+            poolStatus: pool.status
+        });
+
+    } catch (error) {
+        console.error('Simulation error:', error);
+        res.status(500).json({ error: 'Server simulation failed' });
     }
 };

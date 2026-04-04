@@ -27,6 +27,7 @@ const AuthFlow = () => {
     });
     const [file, setFile] = useState(null);
     const [parsedData, setParsedData] = useState(null);
+    const [bankStatementSessionKey, setBankStatementSessionKey] = useState(null);
 
     const nextStep = () => setStep(prev => prev + 1);
     const prevStep = () => {
@@ -68,7 +69,11 @@ const AuthFlow = () => {
                 name: res.data.user.name,
                 trustScore: res.data.user.trustScore,
                 airdropAmount: res.data.user.tokensIssued,
-                walletAddress: res.data.user.walletAddress
+                walletAddress: res.data.user.walletAddress,
+                income: res.data.user.income || 0,
+                expenses: res.data.user.expenses || 0,
+                employment: res.data.user.employment || 'Salaried',
+                hasBankStatement: res.data.user.hasBankStatement || false,
             }));
             navigate('/dashboard');
         } catch (err) {
@@ -92,6 +97,10 @@ const AuthFlow = () => {
                 formParams.append('statement', file);
                 const res = await axios.post('http://localhost:5000/api/auth/upload-statement', formParams);
                 setParsedData(res.data.data);
+                // Store the session key so we can link the bank statement to the wallet on final submit
+                if (res.data.sessionKey) {
+                    setBankStatementSessionKey(res.data.sessionKey);
+                }
                 setFormData(prev => ({
                     ...prev,
                     income: res.data.data.income,
@@ -117,14 +126,20 @@ const AuthFlow = () => {
             const response = await axios.post('http://localhost:5000/api/auth/onboarding', {
                 ...formData,
                 walletAddress: address,
-                trustScore
+                trustScore,
+                // Forward the session key so the backend links the stored bank statement to this wallet
+                ...(bankStatementSessionKey ? { bankStatementSessionKey } : {})
             });
 
             localStorage.setItem('chitx_user', JSON.stringify({
                 trustScore: trustScore || response.data.trustScore,
                 airdropAmount: response.data.user?.tokensIssued || (response.data.trustScore * 10),
                 walletAddress: address,
-                name: formData.name
+                name: formData.name,
+                income: Number(formData.income) || 0,
+                expenses: Number(formData.expenses) || 0,
+                employment: formData.employment || 'Salaried',
+                hasBankStatement: formData.hasBankStatement || false,
             }));
 
             setResult(response.data);
@@ -469,7 +484,11 @@ const AuthFlow = () => {
                                             trustScore: result.trustScore,
                                             airdropAmount: result.trustScore * 10,
                                             walletAddress: address,
-                                            name: formData.name
+                                            name: formData.name,
+                                            income: Number(formData.income) || 0,
+                                            expenses: Number(formData.expenses) || 0,
+                                            employment: formData.employment || 'Salaried',
+                                            hasBankStatement: formData.hasBankStatement || false,
                                         }));
                                         navigate('/dashboard');
                                     }}>
