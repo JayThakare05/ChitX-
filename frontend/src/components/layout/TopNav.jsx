@@ -1,0 +1,46 @@
+import React from 'react';
+import { Wallet, CheckCircle, User } from 'lucide-react';
+import { Link } from 'react-router-dom';
+
+const TopNav = () => {
+  return (
+    <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-50">
+      <div className="flex items-center gap-12">
+        <Link to="/" className="text-2xl font-black text-slate-800 tracking-tighter">
+          Chit<span className="text-teal-600">X</span>
+        </Link>
+        <nav className="flex items-center gap-8">
+          {['Market', 'Staking', 'Analytics'].map((link) => (
+            <Link
+              key={link}
+              to={`/${link.toLowerCase()}`}
+              className="text-sm font-medium text-slate-500 hover:text-slate-900 transition-colors"
+            >
+              {link}
+            </Link>
+          ))}
+        </nav>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <div className="bg-teal-50 text-teal-700 px-3 py-1.5 rounded-full flex items-center gap-1.5 border border-teal-100/50">
+          <CheckCircle size={14} className="text-teal-600 fill-teal-100" />
+          <span className="text-xs font-bold uppercase tracking-wider">ZK-Verified</span>
+        </div>
+        
+        <button className="bg-teal-900 text-white px-5 py-2.5 rounded-full text-sm font-semibold flex items-center gap-2 hover:bg-teal-950 transition-colors shadow-md shadow-teal-100/30">
+          <Wallet size={16} />
+          Connect Wallet
+        </button>
+
+        <div className="w-10 h-10 rounded-full border-2 border-slate-100 overflow-hidden cursor-pointer hover:border-teal-200 transition-all p-0.5">
+          <div className="w-full h-full bg-slate-200 rounded-full flex items-center justify-center text-slate-400">
+             <User size={20} />
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+};
+
+export default TopNav;
