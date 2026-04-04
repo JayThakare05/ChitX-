@@ -1,7 +1,10 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Layout from './components/layout/Layout';
+import LandingPage from './pages/LandingPage';
 import Dashboard from './pages/Dashboard';
+import AuthPage from './pages/AuthPage';
+import OnboardingPage from './pages/OnboardingPage';
 import MyPools from './pages/MyPools';
 import JointPool from './pages/JointPool';
 import Payments from './pages/Payments';
@@ -16,9 +19,12 @@ import {
 
 function App() {
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/auth" element={<AuthPage />} />
+      <Route path="/onboarding" element={<OnboardingPage />} />
+      <Route element={<Layout />}>
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/my-pools" element={<MyPools />} />
         <Route path="/joint-pool" element={<JointPool />} />
         <Route path="/payments" element={<Payments />} />
@@ -29,8 +35,8 @@ function App() {
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Dashboard />} />
-      </Routes>
-    </Layout>
+      </Route>
+    </Routes>
   )
 }
 

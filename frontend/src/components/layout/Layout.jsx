@@ -1,8 +1,9 @@
 import React from 'react';
 import Sidebar from './Sidebar';
 import TopNav from './TopNav';
+import { Outlet } from 'react-router-dom';
 
-const Layout = ({ children }) => {
+const Layout = () => {
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans antialiased text-slate-800">
       <Sidebar />
@@ -10,7 +11,7 @@ const Layout = ({ children }) => {
         <TopNav />
         <main className="flex-1 overflow-y-auto p-12 custom-scrollbar">
           <div className="max-w-[1400px] mx-auto space-y-12">
-            {children}
+            <Outlet />
           </div>
         </main>
       </div>
