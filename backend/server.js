@@ -1,32 +1,32 @@
 const express = require('express');
 const cors = require('cors');
-const axios = require('axios');
+const mongoose = require('mongoose');
+require('dotenv').config();
 
 const app = express();
 const PORT = 5000;
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 
+// Routes
+const authRoutes = require('./routes/auth');
+app.use('/api/auth', authRoutes);
+
+// Database Connection
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/chitx';
+
+mongoose.connect(MONGO_URI)
+    .then(() => console.log('MongoDB connected successfully'))
+    .catch(err => console.error('MongoDB connection error:', err));
+
+// Fallback Route for Trigger Test
 app.post('/api/trigger', async (req, res) => {
-    console.log('Backend (Node/Express): Received request from Frontend');
-    
-    try {
-        // Forward request to AI Service (FastAPI)
-        console.log('Backend (Node/Express): Forwarding request to AI Service...');
-        const aiResponse = await axios.post('http://localhost:8000/ai/process');
-        
-        console.log('Backend (Node/Express): Received response from AI Service');
-        res.status(200).json({
-            message: 'Pipeline complete!',
-            ai_service_response: aiResponse.data
-        });
-    } catch (error) {
-        console.error('Backend (Node/Express): Error calling AI Service:', error.message);
-        res.status(500).json({ error: 'Failed to communicate with AI Service' });
-    }
+    console.log('Backend: Trigger Test');
+    res.status(200).json({ message: 'Bridge working' });
 });
 
 app.listen(PORT, () => {
-    console.log(`Backend server running on http://localhost:${PORT}`);
+    console.log(`ChitX Backend running on http://localhost:${PORT}`);
 });
