@@ -40,6 +40,14 @@ const UserSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    encryptedPrivateKey: {
+        type: String,
+        default: null
+    },
+    encryptionIv: {
+        type: String,
+        default: null
+    },
     airdropTxHash: {
         type: String,
         default: null

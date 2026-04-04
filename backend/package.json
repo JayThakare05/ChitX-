@@ -16,6 +16,8 @@
     "dotenv": "^17.4.0",
     "ethers": "^6.16.0",
     "express": "^5.2.1",
-    "mongoose": "^9.4.1"
+    "form-data": "^4.0.5",
+    "mongoose": "^9.4.1",
+    "multer": "^2.1.1"
   }
 }
