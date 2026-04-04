@@ -1,12 +1,30 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import PoolFlipCard from '../components/dashboard/PoolFlipCard';
 
 const JointPool = () => {
-  // Mock data representing pools the user has already joined
-  const joinedPools = [
-    { id: 1, totalAmount: 1000, members: 10, status: 'JOINED' },
-    { id: 2, totalAmount: 12000, members: 12, status: 'JOINED' },
-  ];
+  const [joinedPools, setJoinedPools] = useState([]);
+
+  const fetchJoinedPools = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/pools');
+      const data = await response.json();
+      if (response.ok) {
+        const userStr = localStorage.getItem('chitx_user');
+        const wallet = userStr ? JSON.parse(userStr).walletAddress?.toLowerCase() : null;
+        
+        if (wallet) {
+          const userJoined = data.pools.filter(p => p.joinedMembers && p.joinedMembers.includes(wallet));
+          setJoinedPools(userJoined);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch pools:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchJoinedPools();
+  }, []);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -20,7 +38,7 @@ const JointPool = () => {
       {joinedPools.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {joinedPools.map(pool => (
-            <PoolFlipCard key={pool.id} pool={pool} />
+            <PoolFlipCard key={pool._id} pool={{ ...pool, id: pool._id }} onRefresh={fetchJoinedPools} />
           ))}
         </div>
       ) : (

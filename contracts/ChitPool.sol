@@ -7,100 +7,59 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
- * @title ChitPool
+ * @title ChitPool Vault
  * @dev Escrow contract for ChitX chit fund pools.
- *      Users deposit CTX tokens into the pool.
- *      Only the contract owner (backend service) can execute payouts to winners.
- *      Includes reentrancy protection and safe ERC-20 transfers.
+ *      Users transfer CTX tokens directly to this contract's address (1-step payment).
+ *      Only the contract owner (backend AI Oracle) can execute payouts/refunds.
  */
 contract ChitPool is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable ctxToken;
 
-    /// @dev Tracks each user's deposited balance in this pool
-    mapping(address => uint256) public deposits;
-
-    /// @dev Total amount of CTX held in the pool across all depositors
-    uint256 public totalPoolBalance;
-
-    // ───────────────────────── Events ─────────────────────────
-    event Deposited(address indexed user, uint256 amount, uint256 timestamp);
-    event PayoutExecuted(address indexed winner, uint256 amount, uint256 timestamp);
+    event FundsWithdrawn(address indexed to, uint256 amount, string reason, uint256 timestamp);
     event EmergencyWithdraw(address indexed owner, uint256 amount);
 
-    // ───────────────────────── Constructor ─────────────────────────
-    /**
-     * @param _ctxToken Address of the deployed ChitXToken (CTX) contract.
-     */
     constructor(address _ctxToken) Ownable(msg.sender) {
         require(_ctxToken != address(0), "ChitPool: token address cannot be zero");
         ctxToken = IERC20(_ctxToken);
     }
 
-    // ───────────────────────── User Functions ─────────────────────────
     /**
-     * @dev Allows a user to deposit CTX tokens into the pool.
-     *      The user must have approved this contract to spend `amount` CTX first.
-     * @param amount The number of CTX tokens to deposit (in wei).
+     * @dev Core Escrow Function: 
+     *      Allows the backend AI Oracle to dispense precise funds from the vault.
+     *      Used for monthly payouts and exact partial refunds when a user leaves early.
+     * @param to The wallet receiving the money.
+     * @param amount The exact amount in wei.
+     * @param reason A log index (e.g. "Refund", "Monthly Payout").
      */
-    function deposit(uint256 amount) external nonReentrant {
-        require(amount > 0, "ChitPool: deposit amount must be greater than 0");
+    function backendTransfer(address to, uint256 amount, string calldata reason) external onlyOwner nonReentrant {
+        require(to != address(0), "ChitPool: cannot send to zero address");
+        require(amount > 0, "ChitPool: amount must be greater than zero");
+        
+        uint256 vaultBalance = ctxToken.balanceOf(address(this));
+        require(vaultBalance >= amount, "ChitPool: insufficient vault liquidity");
 
-        ctxToken.safeTransferFrom(msg.sender, address(this), amount);
-        deposits[msg.sender] += amount;
-        totalPoolBalance += amount;
-
-        emit Deposited(msg.sender, amount, block.timestamp);
-    }
-
-    // ───────────────────────── Owner-Only Functions ─────────────────────────
-    /**
-     * @dev Executes a payout to the winning member of the chit round.
-     *      Can ONLY be called by the contract owner (our backend wallet).
-     *      Transfers the entire pool balance to the winner.
-     * @param winner The address of the round winner determined by AI.
-     */
-    function executePayout(address winner) external onlyOwner nonReentrant {
-        require(winner != address(0), "ChitPool: winner address cannot be zero");
-        require(totalPoolBalance > 0, "ChitPool: no funds in pool to distribute");
-
-        uint256 payoutAmount = totalPoolBalance;
-        totalPoolBalance = 0;
-
-        // Reset all deposit records — new round starts fresh
-        // Note: In production, you'd iterate or use a separate round-tracking mechanism
-
-        ctxToken.safeTransfer(winner, payoutAmount);
-        emit PayoutExecuted(winner, payoutAmount, block.timestamp);
+        ctxToken.safeTransfer(to, amount);
+        
+        emit FundsWithdrawn(to, amount, reason, block.timestamp);
     }
 
     /**
-     * @dev Emergency withdrawal by owner in case of critical issues.
-     *      Transfers all pool funds to the owner.
+     * @dev Emergency withdrawal: dumps all tokens back to the Treasury.
      */
     function emergencyWithdraw() external onlyOwner nonReentrant {
         uint256 balance = ctxToken.balanceOf(address(this));
         require(balance > 0, "ChitPool: no tokens to withdraw");
 
         ctxToken.safeTransfer(owner(), balance);
-        totalPoolBalance = 0;
-        
         emit EmergencyWithdraw(owner(), balance);
     }
 
-    // ───────────────────────── View Functions ─────────────────────────
     /**
-     * @dev Returns the deposited balance of a specific user.
+     * @dev Returns the total CTX liquidity secured in this vault.
      */
-    function getDeposit(address user) external view returns (uint256) {
-        return deposits[user];
-    }
-
-    /**
-     * @dev Returns the total CTX balance held by this contract.
-     */
-    function getPoolBalance() external view returns (uint256) {
+    function getVaultBalance() external view returns (uint256) {
         return ctxToken.balanceOf(address(this));
     }
 }

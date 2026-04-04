@@ -21,7 +21,7 @@ function cn(...inputs) {
 }
 
 const navItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+  { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: Layers, label: 'My Pools', path: '/my-pools' },
   { icon: PlusCircle, label: 'Joint Pool', path: '/joint-pool' },
   { icon: CreditCard, label: 'Payments', path: '/payments' },

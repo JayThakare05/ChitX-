@@ -59,7 +59,6 @@ class Web3Service {
             const tokenSymbol = await this.ctxContract.symbol();
             const treasuryBalance = await this.ctxContract.balanceOf(this.treasuryWallet.address);
 
-            console.log(`🪙 Token: ${tokenName} (${tokenSymbol})`);
             console.log(`📦 Treasury Balance: ${ethers.formatEther(treasuryBalance)} CTX`);
 
             this.initialized = true;
@@ -137,6 +136,41 @@ class Web3Service {
                 error: error.message,
                 message: 'Token airdrop failed — tokens will be allocated once blockchain is reachable'
             };
+        }
+    }
+
+    /**
+     * Transfer CTX tokens from Treasury to a user. Used for refunds and pool payouts.
+     * @param {string} toAddress - The recipient's wallet address
+     * @param {number} amount - Amount of CTX tokens to send
+     */
+    async transferTokens(toAddress, amount) {
+        if (!this.initialized) {
+            console.warn('⚠️ Web3Service offline — simulating transfer');
+            return { success: true, txHash: 'SIM_TX', simulated: true };
+        }
+
+        try {
+            if (!ethers.isAddress(toAddress)) {
+                throw new Error(`Invalid wallet address: ${toAddress}`);
+            }
+
+            const amountInWei = ethers.parseEther(amount.toString());
+            
+            // Check Treasury has enough balance
+            const treasuryBalance = await this.ctxContract.balanceOf(this.treasuryWallet.address);
+            if (treasuryBalance < amountInWei) {
+                throw new Error(`Insufficient Treasury balance. Need ${amount} CTX.`);
+            }
+
+            console.log(`💸 Transferring ${amount} CTX to ${toAddress}...`);
+            const tx = await this.ctxContract.transfer(toAddress, amountInWei);
+            const receipt = await tx.wait(1);
+            
+            return { success: true, txHash: tx.hash, blockNumber: receipt.blockNumber, simulated: false };
+        } catch (error) {
+            console.error('❌ Token transfer failed:', error.message);
+            throw error;
         }
     }
 
