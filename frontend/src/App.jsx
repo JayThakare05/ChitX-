@@ -6,8 +6,8 @@ import MyPools from './pages/MyPools';
 import JointPool from './pages/JointPool';
 import Payments from './pages/Payments';
 import TrustScoreDetails from './pages/TrustScoreDetails';
+import EmergencyFund from './pages/EmergencyFund';
 import {
-  EmergencyFund,
   AIInsightsPage,
   TransactionsLog,
   NotificationsPage,

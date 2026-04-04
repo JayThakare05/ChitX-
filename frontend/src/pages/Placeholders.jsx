@@ -16,8 +16,6 @@ const PageContainer = ({ title, description }) => (
   </div>
 );
 
-export const EmergencyFund = () => <PageContainer title="Emergency Fund" description="Access or contribute to the platform's multi-sig backed emergency safety net." />;
-
 export const AIInsightsPage = () => <PageContainer title="AI Analytics" description="Deep dive into Luminous AI Oracle recommendations and predictive yield analytics." />;
 
 export const TransactionsLog = () => <PageContainer title="Transactions Log" description="A complete, auditable on-chain history of every interaction your wallet has made across protocols." />;

@@ -14,13 +14,14 @@ const Layout = ({ children }) => {
           </div>
         </main>
       </div>
-      
+
       {/* Floating Action Button */}
       <button className="fixed bottom-8 right-8 w-14 h-14 bg-teal-900 text-white rounded-full flex items-center justify-center shadow-2xl shadow-teal-900/40 hover:scale-110 active:scale-95 transition-all z-50">
         <span className="text-2xl font-bold">+</span>
       </button>
-      
-      <style dangerouslySetInnerHTML={{ __html: `
+
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .custom-scrollbar::-webkit-scrollbar {
           width: 6px;
         }

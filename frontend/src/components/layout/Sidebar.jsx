@@ -1,14 +1,14 @@
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  Layers, 
-  PlusCircle, 
-  CreditCard, 
-  ShieldCheck, 
-  AlertCircle, 
-  BrainCircuit, 
-  History, 
-  Bell, 
+import {
+  LayoutDashboard,
+  Layers,
+  PlusCircle,
+  CreditCard,
+  ShieldCheck,
+  AlertCircle,
+  BrainCircuit,
+  History,
+  Bell,
   Settings,
   Plus
 } from 'lucide-react';
@@ -56,8 +56,8 @@ const Sidebar = () => {
             )}
           >
             <item.icon size={20} className={cn(
-                "transition-colors",
-                location.pathname === item.path ? "text-teal-600" : "text-slate-400 group-hover:text-slate-600"
+              "transition-colors",
+              location.pathname === item.path ? "text-teal-600" : "text-slate-400 group-hover:text-slate-600"
             )} />
             <span className="text-sm">{item.label}</span>
           </Link>
