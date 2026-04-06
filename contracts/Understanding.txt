@@ -1,0 +1,29 @@
+# ChitX Blockchain Implementation — Simple Explanation
+
+This document explains how our blockchain system works in plain and easy language.
+
+## 1. What is the CTX Token? (ChitXToken.sol)
+Think of the CTX Token as the "Digital Currency" created specifically for our platform.
+- **Supply**: There are 1,000,000 CTX tokens to start with.
+- **Treasury**: All these tokens are stored in a "Treasury" (the platform's main wallet).
+- **Purpose**: We use these tokens to give rewards (Airdrops) to new users and to pay out winners from the pools.
+
+## 2. What is the ChitPool? (ChitPool.sol)
+The ChitPool is like a "Digital Locker" or "Safe" where everyone's money is kept during a chit fund cycle.
+- **Escrow**: When you join a pool and pay your monthly fee, your CTX tokens go inside this safe.
+- **Security**: No human can just take the money. The tokens are locked until the "AI Oracle" decides who should get them.
+- **Payouts**: Once the AI calculates a winner (based on need and trust), it tells the Safe to automatically send the money to that winner's wallet.
+
+## 3. How the Backend Connects (web3Service.js)
+The backend acts as the bridge between our code and the Polygon Blockchain.
+- **Automatic Airdrops**: When you verify your bank statement, the backend automatically sends you CTX tokens based on your Trust Score.
+- **Verification**: It checks the blockchain to make sure you actually have enough tokens before you join a pool.
+- **Gas Fees**: We use the Polygon Amoy Testnet because it is extremely fast and the transaction fees are almost zero.
+
+## 4. Key Terms Simplified
+- **Wallet Address**: Your unique digital ID on the blockchain (like a bank account number).
+- **Smart Contract**: A piece of code that lives on the blockchain and handles money automatically without a middleman.
+- **Wei**: The smallest unit of a token (like pennies to a dollar). We handle large numbers because the blockchain counts every tiny fraction of a token.
+
+---
+This system ensures that your money is safe, payouts are fair, and everything is tracked transparently on the blockchain.
