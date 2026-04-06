@@ -98,4 +98,4 @@ python server.py
 
 ---
 
-© 2024 ChitX Protocol. Built for a more equitable financial future.
+© 2026 ChitX Protocol. Built for a more equitable financial future.
