@@ -10,7 +10,8 @@ import {
   History, 
   Bell, 
   Settings,
-  Plus
+  Plus,
+  LineChart
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { clsx } from 'clsx';
@@ -28,6 +29,7 @@ const navItems = [
   { icon: ShieldCheck, label: 'Trust Score', path: '/trust-score' },
   { icon: AlertCircle, label: 'Emergency Fund', path: '/emergency-fund' },
   { icon: BrainCircuit, label: 'AI Insights', path: '/ai-insights' },
+  { icon: LineChart, label: 'AI Simulation', path: '/simulation' },
   { icon: History, label: 'Transactions', path: '/transactions' },
   { icon: Bell, label: 'Notifications', path: '/notifications' },
   { icon: Settings, label: 'Settings', path: '/settings' },

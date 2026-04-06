@@ -22,6 +22,7 @@ import MyPools from './pages/MyPools';
 import JointPool from './pages/JointPool';
 import Payments from './pages/Payments';
 import TrustScoreDetails from './pages/TrustScoreDetails';
+import AISimulation from './pages/AISimulation';
 import {
   EmergencyFund,
   AIInsightsPage,
@@ -65,6 +66,7 @@ function App() {
               <Route path="/trust-score" element={<Layout><TrustScoreDetails /></Layout>} />
               <Route path="/emergency-fund" element={<Layout><EmergencyFund /></Layout>} />
               <Route path="/ai-insights" element={<Layout><AIInsightsPage /></Layout>} />
+              <Route path="/simulation" element={<Layout><AISimulation /></Layout>} />
               <Route path="/transactions" element={<Layout><TransactionsLog /></Layout>} />
               <Route path="/notifications" element={<Layout><NotificationsPage /></Layout>} />
               <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />

@@ -87,8 +87,8 @@ const MyPools = () => {
       const formattedPools = data.map(p => ({
         id: p._id,
         totalAmount: p.totalPot || 0,
-        members: p.durationMonths || 10,
-        joinedCount: Array.isArray(p.members) ? p.members.length : 0,
+        members: p.durationMonths || p.membersCount || p.members || 10,
+        joinedCount: Array.isArray(p.joinedMembers) ? p.joinedMembers.length : (Array.isArray(p.members) ? p.members.length : 0),
         status: p.status ? (p.status === 'pending' ? 'OPEN' : p.status.toUpperCase()) : 'OPEN'
       }))
       // Filter out ghost pools with 0 totalPot

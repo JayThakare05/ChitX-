@@ -1,4 +1,5 @@
 const { ethers } = require('ethers');
+const telegramService = require('./telegramService');
 
 // Minimal ERC-20 ABI — only the functions we need
 const ERC20_ABI = [
@@ -207,6 +208,10 @@ class Web3Service {
             console.log(`⏳ Waiting for CTX transfer tx confirmation (tx: ${tx.hash})...`);
             const receipt = await tx.wait(1);
             console.log(`✅ Payout of ${payoutAmount} CTX dispatched on-chain! Tx Hash: ${tx.hash}, Block: ${receipt.blockNumber}`);
+            
+            // Fire off a Telegram notification!
+            await telegramService.sendPayoutReceipt(poolId, checksummedAddress, payoutAmount, tx.hash);
+
             return { success: true, txHash: tx.hash };
 
         } catch (error) {
@@ -214,6 +219,10 @@ class Web3Service {
             // Fallback: still emit success so UI doesn't hang
             const fallbackHash = "0x" + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
             console.warn(`⚠️ Using fallback simulated tx hash: ${fallbackHash}`);
+            
+            // Fire off Telegram notification even for simulated fallback locally!
+            await telegramService.sendPayoutReceipt(poolId, winnerAddress, payoutAmount, fallbackHash + "-simulated");
+            
             return { success: true, txHash: fallbackHash, simulated: true };
         }
     }

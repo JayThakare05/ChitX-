@@ -81,13 +81,36 @@ async function calculateAIPriorityRanking(poolId, members, poolContribution) {
         console.log(`Triggering AI Matrix for Pool ${poolId}...`);
         
         const predictions = await Promise.all(members.map(async (memberId) => {
-            const user = await User.findById(memberId);
-            if (!user) return null;
+            // memberId could be a standard MongoDB _id OR a raw Web3 wallet address ('0x...')
+            let user = null;
+            if (mongoose.Types.ObjectId.isValid(memberId)) {
+                user = await User.findById(memberId);
+            }
+            if (!user) {
+                user = await User.findOne({ walletAddress: memberId.toLowerCase() });
+            }
+            
+            // If the Web3 user hasn't created a profile yet, auto-generate a baseline profile for the simulation
+            if (!user) {
+                console.log(`⚠️ User not found for wallet ${memberId}. Generating mock predictive baseline.`);
+                user = {
+                    _id: memberId,
+                    name: `Guest_${memberId.slice(2, 6)}`,
+                    walletAddress: memberId,
+                    income: Math.floor(Math.random() * 100000) + 30000,
+                    expenses: Math.floor(Math.random() * 20000) + 10000,
+                    employment: 'Salaried',
+                    cibilScore: Math.floor(Math.random() * 200) + 600, // 600 - 800
+                    trustScore: Math.floor(Math.random() * 40) + 50,    // 50 - 90
+                    defaults: 0,
+                    participationCount: 1
+                };
+            }
             
             const payload = {
-                income: user.income || 0,
-                expenses: user.expenses || 0,
-                employment: user.employment === 'Business' ? 'Business Owner' : user.employment,
+                income: user.income || 30000,
+                expenses: user.expenses || 15000,
+                employment: user.employment === 'Business' ? 'Business Owner' : (user.employment || 'Salaried'),
                 credit_score: user.cibilScore || 700,
                 avg_balance: user.avgBalance !== undefined ? user.avgBalance : (user.income * 0.3),
                 salary_consistency: user.salaryConsistency !== undefined ? user.salaryConsistency : 0.8,
@@ -237,12 +260,13 @@ io.on('connection', (socket) => {
         try {
             const pool = await Pool.findById(poolId);
             if (pool) {
-                const maxCap = pool.maxMembers || pool.durationMonths || 10;
+                const maxCap = pool.maxMembers || pool.durationMonths || pool.membersCount || 10;
                 poolAuctions[poolId].totalPot = pool.totalPot || 0;
-                const isFull = pool.members.length >= maxCap;
+                const activeMembers = pool.joinedMembers?.length > 0 ? pool.joinedMembers : pool.members;
+                const isFull = activeMembers.length >= maxCap;
                 poolAuctions[poolId].isFull = isFull;
 
-                console.log(`📊 Pool ${poolId}: members=${pool.members.length}/${maxCap}, isFull=${isFull}, timerRunning=${poolAuctions[poolId].timerRunning}, auctionEnded=${poolAuctions[poolId].auctionEnded}`);
+                console.log(`📊 Pool ${poolId}: members=${activeMembers.length}/${maxCap}, isFull=${isFull}, timerRunning=${poolAuctions[poolId].timerRunning}, auctionEnded=${poolAuctions[poolId].auctionEnded}`);
 
                 // Reset stale ended state if pool is full but no timer is running (server restart scenario)
                 if (isFull && poolAuctions[poolId].auctionEnded && !poolTimers[poolId]) {
@@ -254,7 +278,7 @@ io.on('connection', (socket) => {
 
                 if (isFull && !poolAuctions[poolId].timerRunning && !poolAuctions[poolId].auctionEnded) {
                     console.log(`🚀 STARTING TIMER for pool ${poolId}!`);
-                    startAuctionTimer(poolId, pool.members, pool.totalPot, pool.monthlyContribution);
+                    startAuctionTimer(poolId, activeMembers, pool.totalPot, pool.monthlyPay);
                 }
             } else {
                 console.error(`❌ Pool not found in DB: ${poolId}`);
