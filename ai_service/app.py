@@ -6,7 +6,12 @@ import numpy as np
 import io
 import os
 import joblib
+import groq
 from groq import Groq
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # ==============================
 # APP INIT
@@ -36,7 +41,7 @@ except Exception as e:
 # ==============================
 # GROQ CLIENT
 # ==============================
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "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")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 groq_client = Groq(api_key=GROQ_API_KEY)
 
 
