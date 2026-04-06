@@ -52,6 +52,7 @@ npm start
 *Runs on: http://localhost:5000*
 
 
+
 ### Terminal 2: Frontend Dashboard
 ```bash
 cd frontend
