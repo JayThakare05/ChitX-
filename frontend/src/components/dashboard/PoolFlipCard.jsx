@@ -1,30 +1,12 @@
-import React, { useState } from 'react';
-import { Layers, LogOut, ShieldAlert, Award, Clock, Users, ArrowRight, CheckCircle2, AlertCircle, BrainCircuit } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Layers, LogOut, ShieldAlert, Award, Clock, Users, ArrowRight, CheckCircle2, AlertCircle, BrainCircuit, Upload, FileText, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAccount, useWriteContract, useSwitchChain, useWaitForTransactionReceipt } from 'wagmi';
 import { sepolia } from 'wagmi/chains';
 import { parseEther } from 'viem';
 import { ConfirmModal, ResultModal, EligibilityModal } from '../ui/PoolModals';
 
-// CTX Token contract details (Sepolia)
-const CTX_ADDRESS = '0x3F78A5476539BfBD529FfEA0e713f887141412e3';
-const TREASURY_ADDRESS = '0x95e9943BB6F8B301Fa465e698a5aAc435DB48C39';
-const ERC20_ABI = [
-  {
-    name: 'transfer',
-    type: 'function',
-    stateMutability: 'nonpayable',
-    inputs: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }],
-    outputs: [{ name: '', type: 'bool' }],
-  },
-  {
-    name: 'balanceOf',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'account', type: 'address' }],
-    outputs: [{ name: '', type: 'uint256' }],
-  },
-];
+import { CTX_ADDRESS, TREASURY_ADDRESS, ERC20_ABI } from '../../constants';
 
 const PoolFlipCard = ({ pool, onRefresh }) => {
   const members = pool.members || null;
@@ -35,6 +17,10 @@ const PoolFlipCard = ({ pool, onRefresh }) => {
 
   const [isJoining, setIsJoining] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [emergencyFile, setEmergencyFile] = useState(null);
+  const [emergencyReason, setEmergencyReason] = useState('');
+  const [isFlagging, setIsFlagging] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [showJoinConfirm, setShowJoinConfirm] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [resultModal, setResultModal] = useState({ open: false, success: false, title: '', message: '', details: [] });
@@ -251,6 +237,53 @@ const PoolFlipCard = ({ pool, onRefresh }) => {
     }
   };
 
+  const [showEmergencyUpload, setShowEmergencyUpload] = useState(false);
+  const emergencyFileRef = useRef(null);
+
+  const openEmergencyFlow = (e) => {
+    e.stopPropagation();
+    setEmergencyFile(null);
+    setShowEmergencyUpload(true);
+  };
+
+  const handleEmergencyFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) setEmergencyFile(file);
+  };
+
+  const submitEmergency = async () => {
+    if (!emergencyFile) return;
+    setIsFlagging(true);
+    setShowEmergencyUpload(false);
+    try {
+      const formData = new FormData();
+      formData.append('walletAddress', userWallet);
+      formData.append('document', emergencyFile);
+      formData.append('reason', emergencyReason || 'No reason provided');
+
+      const res = await fetch(`http://localhost:5000/api/pools/${pool._id || pool.id}/emergency`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const verif = data.verification || {};
+        showResult(true, '🚨 Emergency Approved!', 
+          `AI verified your document as "${verif.category || 'emergency'}" (${verif.severity || 'high'} severity, ${verif.confidence || 0}% confidence). Your new Priority Score is ${data.newScore}.`);
+        if (onRefresh) onRefresh();
+      } else if (res.status === 403) {
+        showResult(false, 'Emergency Denied', `${data.error}\n\nReason: ${data.reason || 'N/A'}`);
+      } else {
+        showResult(false, 'Failed', data.error || 'Server error computing emergency flag.');
+      }
+    } catch (err) {
+      showResult(false, 'Network Error', 'Backend not reachable.');
+    } finally {
+      setIsFlagging(false);
+      setEmergencyFile(null);
+    }
+  };
+
   // Progress bar
   const joinedCount = pool.joinedMembers ? pool.joinedMembers.length : 0;
   const targetMembers = members || 15;
@@ -311,63 +344,299 @@ const PoolFlipCard = ({ pool, onRefresh }) => {
           </div>
 
           {/* Back Side */}
-          <div className="absolute inset-0 w-full h-full bg-teal-900 rounded-3xl p-7 border border-teal-800 flex flex-col justify-between [backface-visibility:hidden] [transform:rotateY(180deg)] text-white shadow-xl shadow-teal-900/20">
+          <div className="absolute inset-0 w-full h-full bg-[#134e4a] rounded-3xl p-7 flex flex-col justify-between [backface-visibility:hidden] [transform:rotateY(180deg)] text-white shadow-xl shadow-[#134e4a]/30">
             <div>
-              <h4 className="text-[10px] font-extrabold text-teal-400/80 uppercase tracking-widest mb-1">Total Pool Output</h4>
+              <h4 className="text-[10px] font-extrabold text-[#1aa08c] uppercase tracking-widest mb-1">Total Pool Output</h4>
               <div className="text-3xl font-black text-white">{members ? `$${totalAmount.toLocaleString()}` : 'Dynamic'}</div>
             </div>
             
             <div className="space-y-2.5 bg-white/5 rounded-2xl p-3.5 border border-white/10">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-teal-400 font-bold uppercase tracking-widest text-[10px]">Monthly Pay</span>
+                <span className="text-[#1aa08c] font-bold uppercase tracking-widest text-[10px]">Monthly Pay</span>
                 <span className="font-black text-white">${monthlyPay.toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-teal-400 font-bold uppercase tracking-widest text-[10px]">Members</span>
+                <span className="text-[#1aa08c] font-bold uppercase tracking-widest text-[10px]">Members</span>
                 <span className="font-black text-white">{members || 'Any'}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-teal-400 font-bold uppercase tracking-widest text-[10px]">Fixed Deposit</span>
+                <span className="text-[#1aa08c] font-bold uppercase tracking-widest text-[10px]">Fixed Deposit</span>
                 <span className="font-black text-white">{fixedDeposit} CTX</span>
               </div>
               {isAlreadyJoined && myContribution && (
                 <div className="flex justify-between items-center text-sm border-t border-white/10 pt-2.5">
-                  <span className="text-emerald-400 font-bold uppercase tracking-widest text-[10px]">Your Contribution</span>
-                  <span className="font-black text-emerald-300">{myContribution.totalContributed} CTX</span>
+                  <span className="text-[#1aa08c] font-bold uppercase tracking-widest text-[10px]">Your Contribution</span>
+                  <span className="font-black text-white">{myContribution.totalContributed} CTX</span>
                 </div>
               )}
               {pool.poolTreasury > 0 && (
                 <div className="flex justify-between items-center text-sm border-t border-white/10 pt-2.5">
                   <span className="text-amber-400 font-bold uppercase tracking-widest text-[10px]">Pool Treasury</span>
-                  <span className="font-black text-amber-300">{pool.poolTreasury} CTX</span>
+                  <span className="font-black text-amber-100">{pool.poolTreasury} CTX</span>
                 </div>
               )}
             </div>
             
             <div className="flex gap-2">
               {!isAlreadyJoined ? (
-                <button onClick={openJoinConfirm} disabled={isJoining} className="w-full py-2.5 bg-white text-teal-900 rounded-xl font-bold text-sm hover:bg-teal-50 transition-colors shadow-inner flex justify-center items-center disabled:opacity-70">
+                <button onClick={openJoinConfirm} disabled={isJoining} className="w-full py-2.5 bg-white text-[#134e4a] rounded-xl font-bold text-sm hover:bg-[#f4fcf9] transition-colors shadow-inner flex justify-center items-center disabled:opacity-70 active:scale-95">
                   {getJoinButtonText()}
                 </button>
               ) : canLeave ? (
                 <>
-                  <button onClick={() => navigate(`/pool-simulator?poolId=${pool._id}`)} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm flex justify-center items-center gap-1.5 transition-colors hover:bg-indigo-700">
+                  <button onClick={() => navigate(`/pool-simulator?poolId=${pool._id}`)} className="flex-1 py-2.5 bg-gradient-to-r from-[#1aa08c] to-[#0d9488] shadow-lg shadow-[#1aa08c]/20 text-white rounded-xl font-bold text-sm flex justify-center items-center gap-1.5 transition-all hover:scale-[1.02] active:scale-95">
                     <BrainCircuit size={14} /> Simulate
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); setShowLeaveConfirm(true); }} disabled={isLeaving} className="flex-1 py-2.5 bg-red-500/20 text-red-300 border border-red-500/30 rounded-xl font-bold text-sm hover:bg-red-500/30 transition-colors flex justify-center items-center gap-1.5 disabled:opacity-80">
+                  <button onClick={(e) => { e.stopPropagation(); setShowLeaveConfirm(true); }} disabled={isLeaving} className="flex-1 py-2.5 bg-white/10 border border-white/20 text-white rounded-xl font-bold text-sm hover:bg-white/20 transition-all flex justify-center items-center gap-1.5 disabled:opacity-80 active:scale-95">
                     <LogOut size={14} />
                     {isLeaving ? '...' : 'Leave'}
                   </button>
                 </>
               ) : (
-                <button onClick={() => navigate(`/pool-simulator?poolId=${pool._id}`)} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm flex justify-center items-center gap-2 hover:bg-indigo-700">
+                <button onClick={() => navigate(`/pool-simulator?poolId=${pool._id}`)} className="w-full py-2.5 bg-gradient-to-r from-[#1aa08c] to-[#0d9488] shadow-lg shadow-[#1aa08c]/20 text-white rounded-xl font-bold text-sm flex justify-center items-center gap-2 transition-all hover:scale-[1.02] active:scale-95">
                   <BrainCircuit size={16} /> Simulate AI Process
                 </button>
               )}
             </div>
+            {/* View details button / Enlarge link */}
+            <button 
+              onClick={(e) => { e.stopPropagation(); setIsExpanded(true); }}
+              className="mt-3 text-[11px] font-bold text-white/50 hover:text-white uppercase tracking-widest text-center block w-full outline-none transition-colors"
+            >
+              View Full Details
+            </button>
           </div>
         </div>
       </div>
+
+      {/* ENLARGED POOL CARD MODAL */}
+      {isExpanded && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0f3d3a]/60 backdrop-blur-md animate-in fade-in duration-300"
+          onClick={() => setIsExpanded(false)}
+        >
+          <div 
+            className="bg-[#f4fcf9] border border-[#1aa08c]/20 rounded-[2.5rem] w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col relative px-8 py-8 animate-in zoom-in-95 duration-300 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex justify-between items-start mb-8">
+              <div>
+                <h2 className="text-3xl font-black text-[#134e4a] tracking-tight">Pool Details</h2>
+                <div className="flex items-center gap-2 mt-2 text-[#134e4a]/60 text-sm">
+                  <span className="px-2.5 py-0.5 bg-white text-[#1aa08c] shadow-sm rounded-md uppercase font-black text-[10px] tracking-wider border border-[#1aa08c]/20">
+                    {pool.status || 'AVAILABLE'}
+                  </span>
+                  <span className="font-bold">{members || 'Dynamic'} Members Max</span>
+                </div>
+              </div>
+              <button onClick={() => setIsExpanded(false)} className="p-2 rounded-full text-[#134e4a]/40 hover:text-[#134e4a] bg-black/5 hover:bg-black/10 transition-all cursor-pointer z-50">
+                <X size={20} strokeWidth={3} />
+              </button>
+            </div>
+
+            {/* Stats Row */}
+            <div className="grid grid-cols-3 gap-4 mb-8">
+              <div className="bg-white p-5 rounded-2xl border border-[#1aa08c]/10 shadow-sm">
+                <p className="text-[10px] font-black uppercase text-[#1aa08c] tracking-wider mb-1">Monthly Pay</p>
+                <p className="text-2xl font-black text-[#134e4a]">${monthlyPay.toLocaleString()}</p>
+              </div>
+              <div className="bg-white p-5 rounded-2xl border border-[#1aa08c]/10 shadow-sm">
+                <p className="text-[10px] font-black uppercase text-[#1aa08c] tracking-wider mb-1">Target Output</p>
+                <p className="text-2xl font-black text-emerald-500">${totalAmount.toLocaleString()}</p>
+              </div>
+              <div className="bg-white p-5 rounded-2xl border border-[#1aa08c]/10 shadow-sm">
+                <p className="text-[10px] font-black uppercase text-[#1aa08c] tracking-wider mb-1">Fixed Deposit</p>
+                <p className="text-2xl font-black text-amber-500">{fixedDeposit} CTX</p>
+              </div>
+            </div>
+
+            {/* Detailed Member List */}
+            <div className="flex-1 min-h-[200px]">
+               <h3 className="text-xs font-black uppercase tracking-widest text-[#134e4a]/50 mb-4 flex items-center gap-2 border-b border-[#1aa08c]/10 pb-3">
+                 <Users size={16} /> Registered Investors
+               </h3>
+               
+               <div className="space-y-3">
+                  {!pool.contributions || pool.contributions.length === 0 ? (
+                    <p className="text-[#134e4a]/40 font-medium text-sm italic">No investors have joined yet.</p>
+                  ) : (
+                    pool.contributions.map((c, i) => {
+                      const isMe = c.walletAddress === userWallet;
+                      const hasFlag = c.emergencyFlag;
+                      return (
+                        <div key={i} className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
+                          isMe ? 'border-[#1aa08c]/30 bg-white shadow-sm' : 'border-slate-100 bg-white'
+                        }`}>
+                          <div className="flex items-center gap-3">
+                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black ${isMe ? 'bg-[#1aa08c]/10 text-[#1aa08c]' : 'bg-slate-50 text-[#134e4a]/30'}`}>
+                               #{i+1}
+                             </div>
+                             <div>
+                               <p className="font-bold text-sm text-[#134e4a] flex items-center gap-2">
+                                 {c.walletAddress}
+                                 {isMe && <span className="bg-gradient-to-r from-[#1aa08c] to-[#0d9488] text-white text-[9px] px-1.5 py-0.5 rounded font-black tracking-widest uppercase shadow-sm">You</span>}
+                                 {hasFlag && <span className="bg-red-50 text-red-500 border border-red-500/20 text-[9px] px-1.5 py-0.5 rounded font-black tracking-widest uppercase flex items-center gap-1 shadow-sm"><AlertCircle size={10}/> Emergency</span>}
+                               </p>
+                               <div className="flex items-center gap-3 mt-1.5">
+                                 <p className="text-[10px] font-bold text-[#134e4a]/40 uppercase tracking-widest">
+                                   Contrib: <span className="text-[#134e4a]">${c.monthlyContribution}/mo</span>
+                                 </p>
+                                 <p className="text-[10px] font-bold text-[#134e4a]/40 uppercase tracking-widest">
+                                   Score: <span className="text-[#1aa08c]">{c.priorityScore.toFixed(1)}</span>
+                                 </p>
+                               </div>
+                             </div>
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+               </div>
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="mt-8 pt-6 border-t border-[#1aa08c]/10 flex justify-between items-center sticky bottom-0 z-10 bg-[#f4fcf9]/90 backdrop-blur pb-2">
+               <div className="flex gap-3">
+                  {isAlreadyJoined && canLeave && (
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setIsExpanded(false); setShowLeaveConfirm(true); }}
+                      className="px-5 py-3 border-2 border-slate-200 text-[#134e4a] bg-white hover:bg-[#f4fcf9] rounded-xl font-bold text-sm transition-all flex items-center gap-2 shadow-sm active:scale-95"
+                    >
+                      <LogOut size={16} /> Leave Pool
+                    </button>
+                  )}
+                  {isAlreadyJoined && myContribution && !myContribution.emergencyFlag && !myContribution.hasBeenPaid && (
+                    <button 
+                      onClick={openEmergencyFlow} 
+                      disabled={isFlagging}
+                      className="px-5 py-3 bg-red-50 hover:bg-red-100 border border-red-500/20 text-red-600 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shadow-sm active:scale-95"
+                    >
+                      <ShieldAlert size={16} /> {isFlagging ? 'AI Verifying...' : 'Request Emergency Payout'}
+                    </button>
+                  )}
+               </div>
+               
+               <div>
+                 {isAlreadyJoined && (
+                   <button 
+                     onClick={() => navigate(`/pool-simulator?poolId=${pool._id}`)} 
+                     className="px-6 py-3 bg-gradient-to-r from-[#1aa08c] to-[#0d9488] hover:shadow-lg hover:shadow-[#1aa08c]/30 text-white rounded-xl font-bold text-sm shadow-md transition-all flex items-center gap-2 active:scale-95"
+                   >
+                     Go to Simulator <ArrowRight size={16} strokeWidth={3} />
+                   </button>
+                 )}
+               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EMERGENCY DOCUMENT UPLOAD MODAL */}
+      {showEmergencyUpload && (
+        <div 
+          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-[#0f3d3a]/60 backdrop-blur-md"
+          onClick={() => setShowEmergencyUpload(false)}
+        >
+          <div 
+            className="bg-white border border-[#1aa08c]/20 rounded-[2.5rem] w-full max-w-md shadow-2xl p-8 relative animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h3 className="text-xl font-black text-[#134e4a] flex items-center gap-2">
+                  <ShieldAlert className="text-red-500" size={22} strokeWidth={2.5} /> Emergency Form
+                </h3>
+                <p className="text-[#134e4a]/60 font-medium text-sm mt-1">Upload an authentic document for AI verification.</p>
+              </div>
+              <button onClick={() => setShowEmergencyUpload(false)} className="text-[#134e4a]/40 hover:text-[#134e4a] p-2 bg-black/5 rounded-full hover:bg-black/10 transition-all cursor-pointer">
+                <X size={18} strokeWidth={3} />
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-[10px] font-black text-[#1aa08c] uppercase tracking-widest mb-3">Accepted Documents</p>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-[#f4fcf9] rounded-xl p-3 border border-[#1aa08c]/10">
+                  <FileText size={20} className="text-blue-500 mx-auto mb-1" />
+                  <span className="text-[10px] font-black tracking-widest uppercase text-[#134e4a]/60">Document</span>
+                </div>
+                <div className="bg-[#f4fcf9] rounded-xl p-3 border border-[#1aa08c]/10">
+                  <FileText size={20} className="text-emerald-500 mx-auto mb-1" />
+                  <span className="text-[10px] font-black tracking-widest uppercase text-[#134e4a]/60">Bill</span>
+                </div>
+                <div className="bg-[#f4fcf9] rounded-xl p-3 border border-[#1aa08c]/10">
+                  <FileText size={20} className="text-amber-500 mx-auto mb-1" />
+                  <span className="text-[10px] font-black tracking-widest uppercase text-[#134e4a]/60">Scan</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <label className="text-[10px] font-black text-[#1aa08c] uppercase tracking-widest mb-2 block">Describe your Emergency</label>
+              <textarea 
+                value={emergencyReason}
+                onChange={(e) => setEmergencyReason(e.target.value)}
+                placeholder="Hospital bill for surgery, sudden job loss..."
+                className="w-full bg-[#f4fcf9] font-medium border border-[#1aa08c]/20 rounded-xl p-4 text-sm text-[#134e4a] placeholder:text-[#134e4a]/30 focus:outline-none focus:border-[#1aa08c] focus:ring-4 focus:ring-[#1aa08c]/10 min-h-[80px] resize-none transition-all"
+              />
+            </div>
+
+            {/* File Upload Area */}
+            <input 
+              type="file" 
+              ref={emergencyFileRef}
+              onChange={handleEmergencyFileChange}
+              accept=".pdf,.txt,.csv,.jpg,.jpeg,.png,.webp"
+              className="hidden"
+            />
+            <div 
+              onClick={() => emergencyFileRef.current?.click()}
+              className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
+                emergencyFile 
+                  ? 'border-emerald-500 bg-emerald-50' 
+                  : 'border-slate-200 hover:border-[#1aa08c]/50 bg-[#f4fcf9] hover:bg-white'
+              }`}
+            >
+              {emergencyFile ? (
+                <div>
+                  <CheckCircle2 size={28} className="text-emerald-500 mx-auto mb-2" strokeWidth={3} />
+                  <p className="text-emerald-600 font-bold text-sm tracking-tight">{emergencyFile.name}</p>
+                  <p className="text-[#134e4a]/40 font-bold text-[10px] tracking-widest uppercase mt-1">{(emergencyFile.size / 1024).toFixed(1)} KB — Click to change</p>
+                </div>
+              ) : (
+                <div>
+                  <Upload size={28} className="text-[#1aa08c]/50 mx-auto mb-2" />
+                  <p className="text-[#134e4a] font-bold tracking-tight text-sm">Drop file or click to browse</p>
+                  <p className="text-[#134e4a]/40 font-bold tracking-widest uppercase text-[10px] mt-1.5">PDF, TXT, IMG · Max 10MB</p>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 p-3 bg-red-50 border border-red-500/20 rounded-xl">
+              <p className="text-[10px] text-red-600 font-bold uppercase tracking-widest leading-relaxed">
+                <strong className="text-red-500">⚠️ AI Verifier:</strong> Groq analyzes this for authenticity. Forgery hurts your immutable trust score.
+              </p>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button 
+                onClick={() => setShowEmergencyUpload(false)} 
+                className="flex-[0.8] py-3.5 border-2 border-slate-200 bg-white text-[#134e4a] rounded-xl font-bold text-sm hover:bg-[#f4fcf9] transition-all active:scale-95 shadow-sm"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={submitEmergency} 
+                disabled={!emergencyFile || isFlagging}
+                className="flex-[1.2] py-3.5 bg-gradient-to-r from-red-500 to-red-600 hover:shadow-lg hover:shadow-red-500/30 text-white rounded-xl font-bold text-sm shadow-md transition-all active:scale-95 disabled:opacity-40 flex items-center justify-center gap-2"
+              >
+                <ShieldAlert size={16} strokeWidth={3} /> Submit for AI Review
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <EligibilityModal
         isOpen={showEligibility}

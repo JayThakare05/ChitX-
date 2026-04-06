@@ -313,3 +313,23 @@ exports.updateProfile = async (req, res) => {
         res.status(500).json({ error: 'Server error ' + err.message });
     }
 };
+// ================================================
+// GET PROFILE BY WALLET
+// ================================================
+exports.getProfile = async (req, res) => {
+    try {
+        const walletAddress = req.params.walletAddress;
+        if (!walletAddress) {
+            return res.status(400).json({ error: 'Wallet address required' });
+        }
+
+        const user = await User.findOne({ walletAddress: walletAddress.toLowerCase() });
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.status(200).json({ user });
+    } catch (err) {
+        res.status(500).json({ error: 'Server error ' + err.message });
+    }
+};

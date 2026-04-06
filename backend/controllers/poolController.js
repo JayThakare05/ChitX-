@@ -2,12 +2,17 @@ const Pool = require('../models/Pool');
 const User = require('../models/User');
 const Transaction = require('../models/Transaction');
 const web3Service = require('../services/web3Service');
+const fs = require('fs');
+const path = require('path');
+const axios = require('axios');
+const FormData = require('form-data');
+const EmergencyRecord = require('../models/EmergencyRecord');
 
 
 // Create a new pool
 exports.createPool = async (req, res) => {
     try {
-        const { monthlyPay, members, creatorWallet, status } = req.body;
+        const { monthlyPay, members, creatorWallet, status, isCreatorJoining, txHash } = req.body;
         if (!monthlyPay) {
             return res.status(400).json({ error: 'monthlyPay is required' });
         }
@@ -22,9 +27,40 @@ exports.createPool = async (req, res) => {
             totalAmount,
             members,
             status: status || 'OPEN',
-            creatorWallet
+            creatorWallet: creatorWallet?.toLowerCase(),
+            joinedMembers: isCreatorJoining ? [creatorWallet.toLowerCase()] : [],
+            contributions: isCreatorJoining ? [{
+                walletAddress: creatorWallet.toLowerCase(),
+                monthlyContribution: monthlyPay,
+                targetAmount: totalAmount || (monthlyPay * 10), // Default to 10 if dynamic
+                hasBeenPaid: false,
+                payoutMonth: 0
+            }] : []
         });
         
+        // If creator is joining, deduct their fixed deposit from DB profile to sync with on-chain payment
+        if (isCreatorJoining) {
+            const user = await User.findOne({ walletAddress: creatorWallet.toLowerCase() });
+            if (user) {
+                const fixedDeposit = monthlyPay * 2;
+                user.tokensIssued = Math.max(0, user.tokensIssued - fixedDeposit);
+                await user.save();
+                
+                // Log transaction
+                const txn = new Transaction({
+                    walletAddress: creatorWallet.toLowerCase(),
+                    type: 'POOL_JOIN',
+                    amount: fixedDeposit,
+                    direction: 'DEBIT',
+                    description: `Fixed Deposit for joining pool with ${monthlyPay} monthly pay`,
+                    poolId: newPool._id,
+                    status: 'SUCCESS',
+                    txHash: txHash || 'pending'
+                });
+                await txn.save();
+            }
+        }
+
         await newPool.save();
         res.status(201).json({ message: 'Pool created successfully', pool: newPool });
     } catch (error) {
@@ -171,7 +207,12 @@ exports.joinPool = async (req, res) => {
         pool.contributions.push({
             walletAddress: walletAddress.toLowerCase(),
             fixedDeposit: fixedDeposit,
+            monthlyContribution: pool.monthlyPay,
+            targetAmount: pool.monthlyPay * pool.members,
+            priorityScore: 50, // Default for actual metamask joins, boosted if they trigger emergency
             monthlyPayments: 0,
+            hasBeenPaid: false,
+            payoutMonth: 0,
             totalContributed: fixedDeposit
         });
 
@@ -328,69 +369,136 @@ exports.getUserBalance = async (req, res) => {
 // AI Dynamic Simulators & Synthetic Data
 // ============================================
 
-exports.fillSynthetic = async (req, res) => {
+exports.initDemoPool = async (req, res) => {
     try {
-        const poolId = req.params.id;
-        const pool = await Pool.findById(poolId);
-        if (!pool) return res.status(404).json({ error: 'Pool not found' });
+        const { mode } = req.body; // 'CONSTANT', 'DYNAMIC', or 'EMERGENCY'
+        const isDynamic = mode === 'DYNAMIC' || mode === 'EMERGENCY';
+        const isEmergencyMode = mode === 'EMERGENCY';
+
+        const MAX_POOL_SIZE = 10;
         
-        const MAX_POOL_SIZE = pool.members || 15;
-        const currentCount = pool.joinedMembers ? pool.joinedMembers.length : 0;
-        const toFill = MAX_POOL_SIZE - currentCount;
+        // Read test users depending on mode
+        const filename = isDynamic ? 'chitx_random_users_test.csv' : 'chitx_test_users.csv';
+        const csvPath = path.join(__dirname, '../../', filename);
 
-        if (toFill <= 0) {
-            return res.status(400).json({ error: 'Pool is already full.' });
+        // For emergency mode, randomly pick 2 user indices to flag
+        const emergencyIndices = isEmergencyMode
+            ? [Math.floor(Math.random() * MAX_POOL_SIZE), Math.floor(Math.random() * MAX_POOL_SIZE)]
+                .filter((v, i, a) => a.indexOf(v) === i) // dedupe
+            : [];
+        
+        let csvData;
+        try {
+            csvData = fs.readFileSync(csvPath, 'utf-8');
+        } catch (err) {
+            console.error(`Could not read ${filename}`, err);
+            return res.status(500).json({ error: `Could not read ${filename} dataset.` });
         }
 
-        // Initialize dynamic parameters if not present
-        if (!pool.isDynamic) {
-            pool.isDynamic = true;
-            pool.currentBalance = pool.poolTreasury || 0;
-            pool.totalMonthlyCollection = pool.contributions ? pool.contributions.reduce((acc, c) => acc + (c.monthlyContribution || pool.monthlyPay), 0) : 0;
-            pool.simulationMonth = 0;
-            pool.cycleLimit = 1;
-        }
+        const lines = csvData.trim().split('\n');
+        const users = lines.slice(1, MAX_POOL_SIZE + 1); // Get up to 10 users
 
-        // Generate Synthetic Users
-        if (!pool.joinedMembers) pool.joinedMembers = [];
-        if (!pool.contributions) pool.contributions = [];
+        let initialCollection = 0;
+        let poolContributions = [];
+        let joinedMembers = [];
 
-        for (let i = 0; i < toFill; i++) {
-            const isHighTrust = Math.random() > 0.7; // 30% chance high trust
-            const isLowTrust = Math.random() < 0.2; // 20% chance low trust
+        for (let i = 0; i < users.length; i++) {
+            const line = users[i].trim();
+            if (!line) continue;
             
-            const trustScore = isHighTrust ? Math.floor(Math.random() * 20 + 80) :
-                               isLowTrust ? Math.floor(Math.random() * 20 + 30) :
-                               Math.floor(Math.random() * 30 + 50); // 50-80 base
+            const cols = line.split(',');
+            // Mapping: user_id,income,expenses,employment,credit_score,avg_balance,salary_consistency,spending_stability,payment_timeliness,defaults,participation_count,contribution_consistency,participation_frequency,contribution_amount,pool_size
             
-            const randomIncomeMultiplier = Math.random() * 2 + 1; // 1x to 3x base payload
-            const monthlyContri = Math.floor(pool.monthlyPay * (Math.random() > 0.5 ? 1 : randomIncomeMultiplier));
-            const dummyWallet = `0xSYNTHETIC_${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+            const rawContribution = parseFloat(cols[13]);
             
-            pool.joinedMembers.push(dummyWallet);
-            pool.contributions.push({
+            // If Constant, force to 5. If Dynamic, take the CSV value directly.
+            const userMonthlyPay = isDynamic ? rawContribution : 5;
+            const userTargetAmount = userMonthlyPay * MAX_POOL_SIZE; // e.g. 5*10=50, or DYNAMIC based
+
+            const payload = {
+                income: parseFloat(cols[1]),
+                expenses: parseFloat(cols[2]),
+                employment: cols[3].trim(),
+                credit_score: parseFloat(cols[4]),
+                avg_balance: parseFloat(cols[5]),
+                salary_consistency: parseFloat(cols[6]),
+                spending_stability: parseFloat(cols[7]),
+                payment_timeliness: parseFloat(cols[8]),
+                defaults: parseFloat(cols[9]),
+                participation_count: parseFloat(cols[10]),
+                contribution_consistency: parseFloat(cols[11]),
+                participation_frequency: parseFloat(cols[12]),
+                contribution_amount: userMonthlyPay, 
+                pool_size: MAX_POOL_SIZE
+            };
+
+            // For emergency mode, flag selected users and call ML with is_emergency
+            const isThisUserEmergency = isEmergencyMode && emergencyIndices.includes(i);
+            if (isThisUserEmergency) {
+                payload.is_emergency = true;
+            }
+
+            let pScore = 0;
+            // Fetch from AI model. 
+            try {
+                const mlRes = await axios.post('http://127.0.0.1:5050/predict', payload);
+                if (mlRes.data && mlRes.data.priority_pct !== undefined) {
+                    pScore = mlRes.data.priority_pct;
+                } else {
+                    throw new Error("Invalid response from ML server");
+                }
+            } catch (mlErr) {
+                console.error(`ML Predict error for ${cols[0]}:`, mlErr.message);
+                return res.status(503).json({ error: `AI Prediction Server is offline or failed for ${cols[0]}. Please start server.py on port 5050.` });
+            }
+
+            const dummyWallet = cols[0]; // e.g., USR001
+            
+            joinedMembers.push(dummyWallet);
+            poolContributions.push({
                 walletAddress: dummyWallet,
-                monthlyContribution: monthlyContri,
-                targetAmount: monthlyContri * MAX_POOL_SIZE, // Approximate a basic target (assumes max size duration)
-                fixedDeposit: pool.monthlyPay * 2,
-                trustScoreAtJoin: trustScore,
-                priorityScore: 0,
+                monthlyContribution: userMonthlyPay,
+                targetAmount: userTargetAmount,
+                fixedDeposit: 0, // Ignore for demo
+                trustScoreAtJoin: pScore, // legacy
+                priorityScore: pScore, 
                 hasBeenPaid: false,
-                payoutMonth: 0
+                payoutMonth: 0,
+                emergencyFlag: isThisUserEmergency
             });
-            pool.totalMonthlyCollection += monthlyContri;
+
+            if (isThisUserEmergency) {
+                console.log(`🚨 Emergency flag set for ${dummyWallet} (priority: ${pScore})`);
+            }
+
+            initialCollection += userMonthlyPay;
         }
 
-        await pool.save();
+        // Create the pool now that we have accurate sums
+        const newPool = new Pool({
+            monthlyPay: isDynamic ? 0 : 5, // Display purely for UI config
+            totalAmount: poolContributions.reduce((acc, c) => acc + c.targetAmount, 0),
+            members: MAX_POOL_SIZE,
+            status: 'ACTIVE',
+            isDynamic: true,
+            currentBalance: 0, 
+            totalMonthlyCollection: initialCollection,
+            simulationMonth: 0,
+            cycleLimit: 1,
+            joinedMembers: joinedMembers,
+            contributions: poolContributions
+        });
+
+        await newPool.save();
 
         res.status(200).json({
-            message: `Successfully populated pool with ${toFill} synthetic members balanced by varying algorithmic trust tiers.`,
-            pool
+            message: `Successfully initialized ${isEmergencyMode ? 'Emergency Fund' : isDynamic ? 'Dynamic' : 'Constant'} demo pool using ML models.${isEmergencyMode ? ` Emergency flagged for ${emergencyIndices.length} members.` : ''}`,
+            pool: newPool
         });
 
     } catch (e) {
-        console.error('Synthetic fill error:', e);
-        res.status(500).json({ error: 'Failed to fill synthetic data.' });
+        console.error('Demo pool init error:', e);
+        res.status(500).json({ error: 'Failed to initialize demo pool.' });
     }
 };
 
@@ -425,12 +533,37 @@ exports.simulateMonth = async (req, res) => {
         // Get members who haven't won in this cycle
         let eligible = pool.contributions.filter(c => !c.hasBeenPaid && c.targetAmount <= balanceRemaining);
 
-        // Sort by AI Priority Score / Trust score
+        // Sort by AI Priority Score
         const totalEligible = eligible.length;
-        eligible.sort((a, b) => b.trustScoreAtJoin - a.trustScoreAtJoin);
+        eligible.sort((a, b) => b.priorityScore - a.priorityScore);
 
-        while (eligible.length > 0) {
-            const winner = eligible[0]; // Highest priority
+        if (eligible.length > 0) {
+            // Emergency-flagged users get absolute priority over normal priority scores  
+            const emergencyEligible = eligible.filter(c => c.emergencyFlag && !c.hasBeenPaid);
+            const winner = emergencyEligible.length > 0 ? emergencyEligible[0] : eligible[0];
+            const isEmergencyPayout = !!winner.emergencyFlag;
+            
+            // Calculate payout with emergency penalty
+            let payoutAmount = winner.targetAmount;
+            let penaltyAmount = 0;
+            let bonusPerMember = 0;
+
+            if (isEmergencyPayout) {
+                // 10% penalty deduction for emergency payouts
+                penaltyAmount = Math.round(payoutAmount * 0.10 * 100) / 100;
+                payoutAmount = payoutAmount - penaltyAmount;
+
+                // Distribute penalty equally among remaining unpaid members
+                const remainingUnpaid = pool.contributions.filter(
+                    c => !c.hasBeenPaid && c.walletAddress !== winner.walletAddress
+                );
+                if (remainingUnpaid.length > 0) {
+                    bonusPerMember = Math.round((penaltyAmount / remainingUnpaid.length) * 100) / 100;
+                    remainingUnpaid.forEach(c => {
+                        c.targetAmount = Math.round((c.targetAmount + bonusPerMember) * 100) / 100;
+                    });
+                }
+            }
             
             // Mark as paid
             winner.hasBeenPaid = true;
@@ -438,20 +571,23 @@ exports.simulateMonth = async (req, res) => {
             
             // Generate detailed AI Context/Reasoning
             const rankStr = `Ranked #1 out of ${totalEligible} eligible members.`;
-            const reasoning = `Winner AI selection logic: Trust Score (${winner.trustScoreAtJoin}%) secured priority. Their requested target ($${winner.targetAmount.toLocaleString()}) safely fit within the current pooled treasury balance ($${balanceRemaining.toLocaleString()}). ${rankStr}`;
+            const emergencyCtx = isEmergencyPayout
+                ? ` ⚠️ EMERGENCY PAYOUT: 10% penalty ($${penaltyAmount}) deducted. Actual disbursement: $${payoutAmount}. Penalty distributed as $${bonusPerMember} bonus to each of the ${pool.contributions.filter(c => !c.hasBeenPaid).length} remaining members.`
+                : '';
+            const reasoning = `Winner AI selection logic: Priority Score (${winner.priorityScore}) secured payout. Their requested target ($${winner.targetAmount.toLocaleString()}) safely fit within the current pooled treasury balance ($${balanceRemaining.toLocaleString()}). ${rankStr}${emergencyCtx}`;
             
-            // Deduct
+            // Deduct the FULL target from treasury (penalty stays in pool as bonus)
             balanceRemaining -= winner.targetAmount;
             winnersThisMonth.push({
                 walletAddress: winner.walletAddress,
                 targetAmount: winner.targetAmount,
-                trustScore: winner.trustScoreAtJoin,
+                actualPayout: payoutAmount,
+                penaltyAmount: penaltyAmount,
+                bonusPerMember: bonusPerMember,
+                isEmergency: isEmergencyPayout,
+                priorityScore: winner.priorityScore,
                 aiReasoning: reasoning
             });
-
-            // Re-eval for any remaining balance for remaining unpaid users
-            eligible = pool.contributions.filter(c => !c.hasBeenPaid && c.targetAmount <= balanceRemaining);
-            eligible.sort((a, b) => b.trustScoreAtJoin - a.trustScoreAtJoin);
         }
 
         pool.currentBalance = balanceRemaining;
@@ -486,5 +622,192 @@ exports.simulateMonth = async (req, res) => {
     } catch (error) {
         console.error('Simulation error:', error);
         res.status(500).json({ error: 'Server simulation failed' });
+    }
+};
+
+exports.triggerEmergency = async (req, res) => {
+    try {
+        const poolId = req.params.id;
+        const { walletAddress } = req.body;
+        const pool = await Pool.findById(poolId);
+        if (!pool) return res.status(404).json({ error: 'Pool not found' });
+
+        const contribIndex = pool.contributions.findIndex(c => c.walletAddress === walletAddress);
+        if (contribIndex === -1) return res.status(404).json({ error: 'User not in pool' });
+
+        // One-time only: block duplicate emergency requests
+        if (pool.contributions[contribIndex].emergencyFlag) {
+            return res.status(400).json({ error: 'Emergency has already been flagged for this user in this pool.' });
+        }
+
+        // ──────────────────────────────────────────────────
+        // STEP 1: Verify the uploaded document via Groq
+        // ──────────────────────────────────────────────────
+        const reason = req.body.reason || 'Emergency payout request';
+        if (!req.file) {
+            return res.status(400).json({ error: 'You must upload a supporting document (text, PDF, or image) to request emergency payout.' });
+        }
+
+        const formData = new FormData();
+        formData.append('file', fs.createReadStream(req.file.path));
+
+        let groqApproved = false;
+        let groqResult = {};
+        try {
+            const verifyRes = await axios.post('http://127.0.0.1:8000/ai/verify-emergency', formData, {
+                headers: { ...formData.getHeaders() },
+                timeout: 30000
+            });
+            groqResult = verifyRes.data;
+            groqApproved = groqResult.approved === true;
+            console.log(`🧠 Groq emergency verification: approved=${groqApproved}, reason=${groqResult.reason}`);
+        } catch (groqErr) {
+            console.error('Groq verification error:', groqErr.message);
+            // Even if AI service is down, we can log the attempt as PENDING/ERROR if we want, 
+            // but for now we return 503 as it's a hard dependency.
+            return res.status(503).json({ error: 'AI Emergency Verification Service (app.py:8000) is offline.' });
+        }
+
+        // ──────────────────────────────────────────────────
+        // NEW: Always create a record for history, even if rejected
+        // ──────────────────────────────────────────────────
+        const emergencyRecord = new EmergencyRecord({
+            walletAddress: walletAddress.toLowerCase(),
+            poolId: poolId,
+            reason: reason,
+            documentUrl: `/uploads/emergency/${path.basename(req.file.path)}`,
+            aiResult: {
+                approved: groqApproved,
+                reason: groqResult.reason || (groqApproved ? 'Approved' : 'Unknown rejection'),
+                category: groqResult.category || 'Unknown',
+                confidence: groqResult.confidence || 0
+            },
+            status: groqApproved ? 'APPROVED' : 'REJECTED'
+        });
+
+        if (!groqApproved) {
+            await emergencyRecord.save(); // Save the rejection
+            return res.status(403).json({
+                error: 'Emergency request denied by AI verification.',
+                reason: groqResult.reason || 'Document does not represent a valid emergency.',
+                category: groqResult.category || 'unknown',
+                confidence: groqResult.confidence || 0
+            });
+        }
+
+        // ──────────────────────────────────────────────────
+        // STEP 2: Document approved → run ML priority recalc
+        // ──────────────────────────────────────────────────
+
+        // ... (CSV and payload logic remains same)
+        // Try to find user in CSVs first (demo/simulation users)
+        const dynamicCsv = fs.readFileSync(path.join(__dirname, '../../chitx_random_users_test.csv'), 'utf-8').trim().split('\n');
+        const constantCsv = fs.readFileSync(path.join(__dirname, '../../chitx_test_users.csv'), 'utf-8').trim().split('\n');
+
+        let userLine = dynamicCsv.find(line => line.startsWith(walletAddress + ','));
+        let isDynamic = true;
+        if (!userLine) {
+            userLine = constantCsv.find(line => line.startsWith(walletAddress + ','));
+            isDynamic = false;
+        }
+
+        let payload;
+        if (userLine) {
+            const cols = userLine.split(',');
+            const userMonthlyPay = isDynamic ? parseFloat(cols[13]) : 5;
+            payload = {
+                income: parseFloat(cols[1]),
+                expenses: parseFloat(cols[2]),
+                employment: cols[3].trim(),
+                credit_score: parseFloat(cols[4]),
+                avg_balance: parseFloat(cols[5]),
+                salary_consistency: parseFloat(cols[6]),
+                spending_stability: parseFloat(cols[7]),
+                payment_timeliness: parseFloat(cols[8]),
+                defaults: parseFloat(cols[9]),
+                participation_count: parseFloat(cols[10]),
+                contribution_consistency: parseFloat(cols[11]),
+                participation_frequency: parseFloat(cols[12]),
+                contribution_amount: userMonthlyPay,
+                pool_size: pool.members || 10,
+                is_emergency: true
+            };
+        } else {
+            const dbUser = await User.findOne({ walletAddress: walletAddress.toLowerCase() });
+            if (!dbUser) return res.status(404).json({ error: 'User profile not found.' });
+
+            payload = {
+                income: Number(dbUser.income) || 30000,
+                expenses: Number(dbUser.expenses) || 15000,
+                employment: dbUser.employment === 'Business' ? 'Business Owner' : (dbUser.employment || 'Salaried'),
+                credit_score: Math.min(900, Math.max(300, (Number(dbUser.trustScore) || 50) * 9)),
+                avg_balance: Math.max(0, (Number(dbUser.income) - Number(dbUser.expenses)) || 0) * 3,
+                salary_consistency: 0.7,
+                spending_stability: 0.6,
+                payment_timeliness: 0.8,
+                defaults: 0,
+                participation_count: 1,
+                contribution_consistency: 0.8,
+                participation_frequency: 5,
+                contribution_amount: pool.contributions[contribIndex].monthlyContribution || pool.monthlyPay || 5,
+                pool_size: pool.members || 10,
+                is_emergency: true
+            };
+        }
+
+        // Call the real ML model
+        let newScore = pool.contributions[contribIndex].priorityScore;
+        try {
+            const mlRes = await axios.post('http://127.0.0.1:5050/predict', payload);
+            if (mlRes.data && mlRes.data.priority_pct !== undefined) {
+                newScore = mlRes.data.priority_pct;
+            }
+        } catch (mlErr) {
+            console.error('ML Emergency Error:', mlErr.message);
+            // If ML fails but AI approved, we still flag it but keep old score or slight boost
+            newScore = Math.min(100, newScore + 10); 
+        }
+
+        pool.contributions[contribIndex].priorityScore = newScore;
+        pool.contributions[contribIndex].emergencyFlag = true;
+        await pool.save();
+
+        // Update the record with final score and save
+        emergencyRecord.priorityScoreAtRequest = newScore;
+        await emergencyRecord.save();
+
+        res.status(200).json({
+            message: 'Emergency ML Priority recalculation complete.',
+            newScore: newScore,
+            verification: {
+                category: groqResult.category,
+                severity: groqResult.severity,
+                confidence: groqResult.confidence,
+                reason: groqResult.reason
+            },
+            pool: pool,
+            recordId: emergencyRecord._id
+        });
+
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Failed to trigger emergency check' });
+    }
+};
+
+// GET Emergency History for a user
+exports.getEmergencyHistory = async (req, res) => {
+    try {
+        const { walletAddress } = req.params;
+        if (!walletAddress) return res.status(400).json({ error: 'Wallet address required' });
+
+        const history = await EmergencyRecord.find({ 
+            walletAddress: walletAddress.toLowerCase() 
+        }).sort({ createdAt: -1 });
+
+        res.status(200).json({ history });
+    } catch (err) {
+        console.error('History fetch error:', err);
+        res.status(500).json({ error: 'Failed to fetch emergency history' });
     }
 };

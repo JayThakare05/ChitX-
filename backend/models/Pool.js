@@ -11,6 +11,7 @@ const memberContributionSchema = new mongoose.Schema({
     priorityScore: { type: Number, default: 0 }, // Filled via AI simulation
     hasBeenPaid: { type: Boolean, default: false }, // Cycle flag
     payoutMonth: { type: Number, default: 0 }, // Which simulation month they won
+    emergencyFlag: { type: Boolean, default: false }, // Emergency payout flag
     joinedAt: { type: Date, default: Date.now }
 }, { _id: false });
 

@@ -1,0 +1,146 @@
+[
+  {
+    "id": "0x4b7f...9a12",
+    "income": 85000,
+    "credit_score": 780,
+    "defaults": 0
+  },
+  {
+    "id": "0x1e8c...3f45",
+    "income": 32000,
+    "credit_score": 540,
+    "defaults": 2
+  },
+  {
+    "id": "0x9d2a...8c11",
+    "income": 120000,
+    "credit_score": 810,
+    "defaults": 0
+  },
+  {
+    "id": "0x3f5b...7e90",
+    "income": 48000,
+    "credit_score": 620,
+    "defaults": 1
+  },
+  {
+    "id": "0x8a1c...2b34",
+    "income": 95000,
+    "credit_score": 760,
+    "defaults": 0
+  },
+  {
+    "id": "0x2c4e...5d67",
+    "income": 60000,
+    "credit_score": 580,
+    "defaults": 3
+  },
+  {
+    "id": "0x7e9f...1a23",
+    "income": 75000,
+    "credit_score": 700,
+    "defaults": 0
+  },
+  {
+    "id": "0x5d6a...9c8b",
+    "income": 28000,
+    "credit_score": 490,
+    "defaults": 1
+  },
+  {
+    "id": "0x1b3c...4d5e",
+    "income": 150000,
+    "credit_score": 850,
+    "defaults": 0
+  },
+  {
+    "id": "0x6fbd...2a1c",
+    "income": 55000,
+    "credit_score": 650,
+    "defaults": 1
+  },
+  {
+    "id": "0x8e2f...7c9d",
+    "income": 42000,
+    "credit_score": 560,
+    "defaults": 1
+  },
+  {
+    "id": "0x4c1a...5b2e",
+    "income": 110000,
+    "credit_score": 790,
+    "defaults": 0
+  },
+  {
+    "id": "0x9a3d...6f7b",
+    "income": 68000,
+    "credit_score": 740,
+    "defaults": 0
+  },
+  {
+    "id": "0x2e5f...1c8a",
+    "income": 38000,
+    "credit_score": 510,
+    "defaults": 2
+  },
+  {
+    "id": "0x7b4c...9d2e",
+    "income": 92000,
+    "credit_score": 730,
+    "defaults": 0
+  },
+  {
+    "id": "0x5c8a...3e1f",
+    "income": 72000,
+    "credit_score": 600,
+    "defaults": 2
+  },
+  {
+    "id": "0x1d9b...4a5c",
+    "income": 130000,
+    "credit_score": 820,
+    "defaults": 0
+  },
+  {
+    "id": "0x8f2e...7d1b",
+    "income": 50000,
+    "credit_score": 640,
+    "defaults": 1
+  },
+  {
+    "id": "0x3a1c...5e9f",
+    "income": 25000,
+    "credit_score": 480,
+    "defaults": 2
+  },
+  {
+    "id": "0x6d5b...2c4a",
+    "income": 88000,
+    "credit_score": 770,
+    "defaults": 0
+  },
+  {
+    "id": "0x9e3f...1a7d",
+    "income": 62000,
+    "credit_score": 590,
+    "defaults": 3
+  },
+  {
+    "id": "0x4a2c...8b5e",
+    "income": 140000,
+    "credit_score": 840,
+    "defaults": 0
+  },
+  {
+    "id": "0x7c1d...3f9a",
+    "income": 58000,
+    "credit_score": 690,
+    "defaults": 0
+  },
+  {
+    "id": "0x2b5e...9c4d",
+    "income": 36000,
+    "credit_score": 520,
+    "defaults": 1
+  }
+]

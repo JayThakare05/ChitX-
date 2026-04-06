@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Layers, Users, Wallet, Clock, TrendingUp, ChevronRight, Sparkles, Star } from 'lucide-react';
 import { RadialBarChart, RadialBar, ResponsiveContainer, PolarAngleAxis } from 'recharts';
 
@@ -276,9 +277,9 @@ const ActivePoolsSection = () => {
             </p>
           </div>
           {activePools.length > 0 && (
-            <button className="text-xs font-black text-teal-600 uppercase tracking-widest flex items-center gap-1 hover:gap-2 transition-all">
+            <Link to="/joint-pool" className="text-xs font-black text-teal-600 uppercase tracking-widest flex items-center gap-1 hover:gap-2 transition-all">
               View All <ChevronRight size={14} />
-            </button>
+            </Link>
           )}
         </div>
 

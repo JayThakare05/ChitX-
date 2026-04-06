@@ -8,7 +8,8 @@ import {
   AlertCircle, 
   BrainCircuit, 
   Settings,
-  Plus
+  Bot,
+  Users
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { clsx } from 'clsx';
@@ -25,11 +26,12 @@ const navItems = [
   { icon: CreditCard, label: 'Payments', path: '/payments' },
   { icon: ShieldCheck, label: 'Trust Score', path: '/trust-score' },
   { icon: BrainCircuit, label: 'AI Sim Pool', path: '/pool-simulator' },
+  { icon: Users, label: 'Massive Pooling', path: '/massive-pooling' },
   { icon: AlertCircle, label: 'Emergency Fund', path: '/emergency-fund' },
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 
-const Sidebar = () => {
+const Sidebar = ({ onOpenChat }) => {
   const location = useLocation();
 
   return (
@@ -60,9 +62,12 @@ const Sidebar = () => {
         ))}
       </nav>
 
-      <button className="mt-auto bg-slate-900 text-white rounded-full py-3 px-6 flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors shadow-lg shadow-slate-200">
-        <Plus size={18} />
-        <span className="font-semibold text-sm">New Proposal</span>
+      <button 
+        onClick={onOpenChat}
+        className="mt-auto bg-[#134e4a] text-white rounded-2xl py-4 px-6 flex items-center justify-center gap-3 hover:bg-black transition-all shadow-xl shadow-teal-900/10 group active:scale-95"
+      >
+        <Bot size={20} className="group-hover:rotate-12 transition-transform" />
+        <span className="font-bold text-sm tracking-tight">Ask Oracle</span>
       </button>
     </div>
   );

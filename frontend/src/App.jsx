@@ -24,8 +24,9 @@ import Payments from './pages/Payments';
 import TrustScoreDetails from './pages/TrustScoreDetails';
 import Settings from './pages/Settings';
 import SimulationPanel from './pages/SimulationPanel';
+import AISimulation from './pages/AISimulation';
+import EmergencyFund from './pages/EmergencyFund';
 import {
-  EmergencyFund,
   AIInsightsPage,
   TransactionsLog,
   NotificationsPage
@@ -70,6 +71,7 @@ function App() {
               <Route path="/notifications" element={<Layout><NotificationsPage /></Layout>} />
               <Route path="/settings" element={<Layout><Settings /></Layout>} />
               <Route path="/pool-simulator" element={<Layout><SimulationPanel /></Layout>} />
+              <Route path="/massive-pooling" element={<Layout><AISimulation /></Layout>} />
               
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />

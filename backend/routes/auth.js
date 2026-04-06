@@ -30,6 +30,11 @@ router.post('/onboarding', authController.onboarding);
 // @access  Public
 router.post('/login', authController.loginWithWallet);
 
+// @route   GET api/auth/profile/:walletAddress
+// @desc    Get user profile by wallet
+// @access  Public
+router.get('/profile/:walletAddress', authController.getProfile);
+
 // @route   PUT api/auth/profile
 // @desc    Update user profile
 // @access  Public

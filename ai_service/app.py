@@ -36,7 +36,7 @@ except Exception as e:
 # ==============================
 # GROQ CLIENT
 # ==============================
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "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")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "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")
 groq_client = Groq(api_key=GROQ_API_KEY)
 
 
@@ -219,6 +219,12 @@ class OracleRequest(BaseModel):
     name: str = "Member"
 
 
+class ChatRequest(BaseModel):
+    message: str
+    history: list = []
+    context: dict = {}
+
+
 # ==============================
 # ENDPOINTS
 # ==============================
@@ -335,6 +341,118 @@ Do NOT include any text outside the JSON array."""
         }
 
 
+# ==============================
+# GLOBAL AI CHATBOT (ChitX Oracle)
+# ==============================
+@app.post("/ai/global-chat")
+async def global_chat(data: ChatRequest):
+    try:
+        # Build context string
+        context_str = ""
+        if data.context:
+            user = data.context.get("user", {})
+            txns = data.context.get("transactions", [])
+            pools = data.context.get("pools", [])
+            
+            import json
+            context_str = f"""
+USER CONTEXT:
+- Name: {user.get('name', 'Member')}
+- Trust Score: {user.get('trustScore', 'N/A')}/100
+- Income: ₹{user.get('income', 0):,.0f}
+- Expenses: ₹{user.get('expenses', 0):,.0f}
+- CTX Balance: {user.get('ctxBalance', 0)} CTX
+
+RECENT TRANSACTIONS:
+{json.dumps(txns[:10], indent=2) if txns else "No recent transactions found."}
+
+ACTIVE POOLS:
+{json.dumps(pools, indent=2) if pools else "No active pools joined yet."}
+"""
+
+        system_prompt = f"""You are "ChitX Oracle", the elite AI financial guide for the ChitX Decentralized Protocol. 
+ChitX is an AI-governed decentralized chit fund platform where users join "pools" to save and borrow money collectively with zero intermediaries.
+
+YOUR MISSION:
+1. Help users understand their financial standing on the platform.
+2. Answer questions about their transactions, trust scores, and pools using the provided context.
+3. Educate users on how to use the platform (e.g., Joining pools, sending/receiving money, improving trust scores).
+4. Provide proactive financial advice based on their spending and saving patterns.
+
+⛔ ABSOLUTE TOPIC RESTRICTION — HIGHEST PRIORITY RULE ⛔
+Before answering ANY user message, you MUST first evaluate: "Is this question about ChitX, chit funds, the user's financial data on this platform, or platform mechanics?"
+
+If the answer is NO, you MUST REFUSE. You are NOT a general-purpose assistant. You are NOT a search engine. You are NOT an encyclopedia.
+
+ALLOWED TOPICS (answer these):
+- ChitX platform features, pools, payouts, wallet, CTX tokens
+- The user's trust score, income, expenses, transactions, pool status
+- Chit fund concepts, how chit funds work
+- Platform mechanics: onboarding, emergency fund, payments, AI simulation
+- Basic personal finance advice ONLY as it directly relates to using ChitX (e.g., "Should I join this pool given my income?")
+
+BLOCKED TOPICS (ALWAYS refuse — no exceptions, no partial answers, no hints):
+- General knowledge (e.g., "What is the capital of France?", "How far is the moon?")
+- Pop culture, sports, entertainment (e.g., "Who won the World Cup?", "Best movies of 2024")
+- Science, history, geography, math, trivia unrelated to finance
+- Coding, programming, homework help
+- Recipes, health advice, weather, news
+- Anything that a general chatbot or search engine would answer
+
+REFUSAL BEHAVIOR:
+- Do NOT answer the question at all — not even partially or "just this once"
+- Do NOT say "I'm not supposed to, but..." and then answer anyway
+- Do NOT provide the answer followed by a disclaimer
+- Instead, respond with a firm but polite refusal and redirect, such as:
+  "I'm the ChitX Oracle — your dedicated guide for the ChitX decentralized protocol. That question falls outside my expertise. I'm here to help you with your pools, trust score, transactions, and financial strategy on ChitX. What would you like to know?"
+
+FORMATTING INSTRUCTIONS:
+- Use **bold** for emphasis on numbers, dates, and status.
+- Use # or ## for main sections in long responses.
+- Use Markdown TABLES for listing multiple transactions or comparing pool details.
+- Use `code blocks` for transaction hashes or wallet addresses.
+- Use bullet points for steps and lists.
+
+PLATFORM MANUAL & HOW-TO:
+- Joining a Pool: Navigate to "Massive Pooling" (for large-scale AI simulation) or "Joint Pool" (for neighborhood-style pools). Click 'Join' on an active pool that matches your income level.
+- Payouts: In every pool, a 'Monthly Payout' occurs. The AI Oracle selects the winner based on need (Priority Score) and reliability (Trust Score).
+- Sending/Receiving Money: Use the "Payments" tab to contribute your monthly share or view received payouts. Transactions are AI-tracked but occur on-chain via your connected wallet.
+- Emergency Fund: If you face a crisis (medical, job loss, etc.), go to the "Emergency Fund" page. Upload a document (bill/notice). Our AI verifies it in seconds. If approved, you get a payout from the 1.2M CTX safety pool.
+- Improving Trust Score: Ensure your bank statement is uploaded (Onboarding), maintain a high CTX balance, and never miss a pool payment.
+- CTX Tokens: Native protocol token. 1 CTX is the unit of collateral.
+
+TONE:
+Professional, encouraging, visionary, and concise.
+
+{context_str}
+"""
+
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # Add history (limit last 6 messages to save tokens)
+        for msg in data.history[-6:]:
+            messages.append(msg)
+            
+        # Add current user message
+        messages.append({"role": "user", "content": data.message})
+
+        chat = groq_client.chat.completions.create(
+            messages=messages,
+            model="llama-3.3-70b-versatile",
+            temperature=0.7,
+            max_tokens=1000,
+        )
+
+        response_text = chat.choices[0].message.content.strip()
+        
+        return {"ok": True, "response": response_text}
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"ok": False, "response": "I apologize, but my connection to the ChitX Oracle mesh is temporarily unstable. How else can I assist you with the general platform mechanics?"}
+
+
 @app.post("/ai/parse-statement")
 async def parse_statement(file: UploadFile = File(...)):
     try:
@@ -446,6 +564,141 @@ async def calculate_score(data: KYCData):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==============================
+# EMERGENCY DOCUMENT VERIFICATION (Groq-powered)
+# ==============================
+@app.post("/ai/verify-emergency")
+async def verify_emergency(file: UploadFile = File(...)):
+    """
+    Accepts a document (text, PDF, image) and uses Groq to verify
+    whether it represents a genuine emergency.
+    """
+    try:
+        contents = await file.read()
+        filename = file.filename or "unknown"
+        content_type = file.content_type or ""
+
+        print(f"\n🚨 Emergency doc received: {filename} ({content_type}, {len(contents)} bytes)")
+
+        # Extract text content based on file type
+        doc_text = ""
+
+        if "text" in content_type or filename.endswith((".txt", ".csv")):
+            doc_text = contents.decode("utf-8", errors="replace")
+
+        elif "pdf" in content_type or filename.endswith(".pdf"):
+            # Try to extract text from PDF
+            try:
+                import fitz  # PyMuPDF
+                pdf = fitz.open(stream=contents, filetype="pdf")
+                for page in pdf:
+                    doc_text += page.get_text()
+                pdf.close()
+            except ImportError:
+                # If PyMuPDF not installed, read raw bytes as text
+                doc_text = contents.decode("utf-8", errors="replace")
+            except Exception as e:
+                doc_text = f"[PDF parsing failed: {e}]"
+
+        elif "image" in content_type or filename.endswith((".jpg", ".jpeg", ".png", ".webp")):
+            # For images, use Groq vision model
+            import base64
+            img_b64 = base64.b64encode(contents).decode("utf-8")
+            
+            mime = content_type if content_type else "image/jpeg"
+            
+            try:
+                vision_resp = groq_client.chat.completions.create(
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "Read and extract ALL text from this document image. Return the exact text you see. If it is a medical report, hospital bill, insurance claim, legal notice, or any emergency-related document, extract ALL details including dates, amounts, names, and diagnosis.",
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{mime};base64,{img_b64}",
+                                    },
+                                },
+                            ],
+                        }
+                    ],
+                    model="llama-3.2-90b-vision-preview",
+                    temperature=0.1,
+                    max_tokens=1500,
+                )
+                doc_text = vision_resp.choices[0].message.content.strip()
+                print(f"👁️ Vision OCR result: {doc_text[:300]}...")
+            except Exception as ve:
+                print(f"⚠️ Vision model error: {ve}")
+                doc_text = "[Image could not be processed]"
+        else:
+            doc_text = contents.decode("utf-8", errors="replace")
+
+        if not doc_text or len(doc_text.strip()) < 10:
+            return {"ok": False, "approved": False, "reason": "Document is empty or unreadable."}
+
+        # Truncate very long docs
+        if len(doc_text) > 4000:
+            doc_text = doc_text[:4000] + "\n...[truncated]"
+
+        # Send to Groq for emergency verification
+        verification_prompt = f"""You are a chit fund emergency verification officer. A member has flagged an emergency payout request and uploaded a supporting document.
+
+DOCUMENT CONTENT:
+\"\"\"
+{doc_text}
+\"\"\"
+
+YOUR TASK:
+1. Determine if this document represents a GENUINE EMERGENCY that warrants priority payout from a chit fund. Valid emergencies include: medical emergencies, hospital bills, accident reports, natural disaster damage, legal notices with urgent deadlines, death certificates, insurance claims, job loss letters, urgent home repair invoices, etc.
+2. Assess whether the document appears AUTHENTIC (not fabricated/fake). Check for: realistic details, proper formatting, consistent dates, specific names/amounts, institutional letterheads or references.
+
+Respond ONLY with a valid JSON object with these fields:
+- "approved": boolean (true if genuine emergency, false if not)
+- "confidence": integer 0-100 (how confident you are)
+- "category": string (e.g. "medical", "legal", "financial_hardship", "property_damage", "not_emergency", "suspicious")
+- "reason": string (1-2 sentence explanation of your decision)
+- "severity": string ("critical", "high", "moderate", "low", "none")
+
+IMPORTANT: Be thorough but fair. Only reject if clearly fake or not an emergency. Give benefit of the doubt for borderline cases. Respond ONLY with the JSON object, no other text."""
+
+        verify_resp = groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": verification_prompt}],
+            model="llama-3.3-70b-versatile",
+            temperature=0.1,
+            max_tokens=300,
+        )
+
+        raw_resp = verify_resp.choices[0].message.content.strip()
+        print(f"🧠 Groq verification response: {raw_resp}")
+
+        # Parse JSON
+        import json, re
+        if "```" in raw_resp:
+            match = re.search(r'```(?:json)?\s*([\s\S]*?)```', raw_resp)
+            raw_resp = match.group(1).strip() if match else raw_resp
+
+        result = json.loads(raw_resp)
+
+        return {
+            "ok": True,
+            "approved": result.get("approved", False),
+            "confidence": result.get("confidence", 0),
+            "category": result.get("category", "unknown"),
+            "reason": result.get("reason", "No reason provided."),
+            "severity": result.get("severity", "none"),
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"ok": False, "approved": False, "reason": f"Verification failed: {str(e)}"}
 
 
 if __name__ == "__main__":
